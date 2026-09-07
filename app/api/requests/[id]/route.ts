@@ -4,7 +4,7 @@ import { RequestStatusResponse } from "@/lib/types";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const record = getRequest(id);
+  const record = await getRequest(id);
   if (!record) return NextResponse.json({ error: "Request not found" }, { status: 404 });
   const response: RequestStatusResponse = {
     request_id: record.request_id,
@@ -19,5 +19,5 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     appointment: record.appointment,
     workflow_status: record.workflow_status,
   };
-  return NextResponse.json({ request: response, audit: listAuditForRequest(id) });
+  return NextResponse.json({ request: response, audit: await listAuditForRequest(id) });
 }
