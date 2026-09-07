@@ -3,6 +3,12 @@ import { SESSION_COOKIE, verifySession } from "@/lib/auth";
 
 export async function middleware(req: NextRequest) {
   const pathname = req.nextUrl.pathname;
+
+  // SNS Agent Workbench calls the webhook directly and cannot use the
+  // browser session cookie. The webhook performs its own shared-secret
+  // authentication in the route handler.
+  if (pathname === "/api/webhooks/sns") return NextResponse.next();
+
   const token = req.cookies.get(SESSION_COOKIE)?.value;
   const session = await verifySession(token);
 
