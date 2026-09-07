@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { appendAudit, getRequest, putRequest } from "@/lib/store";
+import { appendAudit, createRequest, getRequest, putRequest } from "@/lib/store";
 import { WorkflowStatus } from "@/lib/types";
 
 export async function POST(req: NextRequest) {
@@ -14,7 +14,35 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json().catch(() => null);
-  if (!body?.request_id || !body?.stage) return NextResponse.json({ error: "request_id and stage are required" }, { status: 400 });
+  if (!body?.stage) return NextResponse.json({ error: "stage is required" }, { status: 400 });
+
+  if (body.stage === "request_creation") {
+    const payload = body.payload;
+    if (!payload?.patient_id || !payload?.request) {
+      return NextResponse.json({ error: "payload.patient_id and payload.request are required" }, { status: 400 });
+    }
+
+    const record = createRequest({
+      patient_id: payload.patient_id,
+      request: payload.request,
+      request_source: payload.request_source ?? "patient_portal",
+      document_uploaded: Boolean(payload.document_uploaded),
+    });
+
+    appendAudit({
+      request_id: record.request_id,
+      event_type: "REQUEST_CREATED",
+      detail: `Request submitted via ${record.request_source}`,
+      actor: record.patient_id,
+    });
+
+    return NextResponse.json({ ok: true, request: record }, { status: 201 });
+  }
+
+  if (!body?.request_id) {
+    return NextResponse.json({ error: "request_id is required" }, { status: 400 });
+  }
+
   const record = getRequest(body.request_id);
   if (!record) return NextResponse.json({ error: "Unknown request_id" }, { status: 404 });
 
