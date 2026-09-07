@@ -1,0 +1,1 @@
+MediSync structure fix prepared on medi-sync-final-fix.
