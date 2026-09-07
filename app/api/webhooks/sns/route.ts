@@ -3,6 +3,16 @@ import { appendAudit, getRequest, putRequest } from "@/lib/store";
 import { WorkflowStatus } from "@/lib/types";
 
 export async function POST(req: NextRequest) {
+  const configuredSecret = process.env.MEDISYNC_WEBHOOK_SECRET;
+  if (!configuredSecret) {
+    return NextResponse.json({ error: "Webhook authentication is not configured" }, { status: 500 });
+  }
+
+  const providedSecret = req.headers.get("X-MediSync-Webhook-Secret");
+  if (!providedSecret || providedSecret !== configuredSecret) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const body = await req.json().catch(() => null);
   if (!body?.request_id || !body?.stage) return NextResponse.json({ error: "request_id and stage are required" }, { status: 400 });
   const record = getRequest(body.request_id);
