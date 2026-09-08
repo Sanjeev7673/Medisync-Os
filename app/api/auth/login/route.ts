@@ -1,37 +1,69 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cognitoConfig, createOAuthState, ROLE_HINT_COOKIE, STATE_COOKIE, UserRole } from "@/lib/auth";
+import {
+  createSession,
+  SESSION_COOKIE,
+  UserRole,
+} from "@/lib/auth";
 
-const selectableRoles: UserRole[] = ["patient", "hospital", "insurance_agent"];
+const selectableRoles: UserRole[] = [
+  "patient",
+  "hospital",
+  "insurance_agent",
+];
+
+function dashboardForRole(role: UserRole) {
+  if (role === "hospital") {
+    return "/hospital/dashboard";
+  }
+
+  if (role === "insurance_agent") {
+    return "/insurance/dashboard";
+  }
+
+  return "/patient/dashboard";
+}
 
 export async function GET(req: NextRequest) {
-  const config = cognitoConfig();
-  const requestedRole = req.nextUrl.searchParams.get("role") as UserRole | null;
-  const role = requestedRole && selectableRoles.includes(requestedRole) ? requestedRole : "patient";
-  const state = await createOAuthState(role);
-  const url = new URL(`${config.domain}/oauth2/authorize`);
-  url.searchParams.set("response_type", "code");
-  url.searchParams.set("client_id", config.clientId);
-  url.searchParams.set("redirect_uri", config.callbackUrl);
-  url.searchParams.set("scope", "openid email profile");
-  url.searchParams.set("state", state);
-  url.searchParams.set("prompt", "login");
+  const requestedRole =
+    req.nextUrl.searchParams.get("role") as UserRole | null;
 
-  const response = NextResponse.redirect(url);
-  // Keep these cookies only for compatibility/cleanup. The signed state itself
-  // carries the role and protects against stale or cross-tab state mismatches.
-  response.cookies.set(STATE_COOKIE, state, {
-    httpOnly: true,
-    secure: true,
-    sameSite: "lax",
-    path: "/",
-    maxAge: 10 * 60,
+  const role =
+    requestedRole &&
+    selectableRoles.includes(requestedRole)
+      ? requestedRole
+      : "patient";
+
+  const session = await createSession({
+    sub: `demo-${role}`,
+    email: `${role}@medisync.demo`,
+    name:
+      role === "patient"
+        ? "Demo Patient"
+        : role === "hospital"
+          ? "Demo Hospital"
+          : "Demo Insurance Agent",
+    role,
+    patientId: role === "patient" ? "P1001" : undefined,
   });
-  response.cookies.set(ROLE_HINT_COOKIE, role, {
-    httpOnly: true,
-    secure: true,
-    sameSite: "lax",
-    path: "/",
-    maxAge: 10 * 60,
-  });
+
+  const response = NextResponse.redirect(
+    new URL(
+      dashboardForRole(role),
+      req.url,
+    ),
+  );
+
+  response.cookies.set(
+    SESSION_COOKIE,
+    session,
+    {
+      httpOnly: true,
+      secure: true,
+      sameSite: "lax",
+      path: "/",
+      maxAge: 60 * 60 * 8,
+    },
+  );
+
   return response;
 }
