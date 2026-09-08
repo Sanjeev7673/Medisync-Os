@@ -89,7 +89,7 @@ create index if not exists documents_request_idx on public.documents(request_id)
 create unique index if not exists documents_storage_unique_idx on public.documents(storage_bucket, storage_path);
 
 -- 002_session_revocation may already have created audit_logs with target_user_id.
--- Add the Phase 2 columns without assuming a fresh table. Existing rows remain valid.
+-- Add Phase 2 columns without assuming a fresh table. Existing rows remain valid.
 create table if not exists public.audit_logs (
   id uuid primary key default gen_random_uuid(), actor_user_id uuid references public.users(id) on delete set null,
   actor_role text, action text not null, entity_type text, entity_id uuid,
@@ -102,6 +102,17 @@ alter table public.audit_logs add column if not exists entity_id uuid;
 alter table public.audit_logs add column if not exists request_id uuid;
 alter table public.audit_logs add column if not exists previous_state jsonb;
 alter table public.audit_logs add column if not exists new_state jsonb;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.audit_logs'::regclass and conname = 'audit_logs_request_id_fkey'
+  ) then
+    alter table public.audit_logs add constraint audit_logs_request_id_fkey foreign key (request_id) references public.requests(id) on delete set null;
+  end if;
+end $$;
+
 create index if not exists audit_logs_entity_idx on public.audit_logs(entity_type, entity_id, created_at desc);
 create index if not exists audit_logs_actor_idx on public.audit_logs(actor_user_id, created_at desc);
 create index if not exists audit_logs_request_idx on public.audit_logs(request_id, created_at desc);
