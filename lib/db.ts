@@ -6,7 +6,6 @@ function required(name: "SUPABASE_URL" | "SUPABASE_SERVICE_ROLE_KEY") {
   return value;
 }
 
-// Server-only Supabase client. Never expose the service-role key to the browser.
 export function getDb() {
   return createClient(
     required("SUPABASE_URL"),
@@ -23,6 +22,7 @@ export type DbUser = {
   role: "PATIENT" | "SPECIALIST" | "HOSPITAL" | "INSURANCE" | "ADMIN";
   organization_id: string | null;
   status: "ACTIVE" | "SUSPENDED" | "DISABLED";
+  session_version: number;
   created_at: string;
   updated_at: string;
 };
