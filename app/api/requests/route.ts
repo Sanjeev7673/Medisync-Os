@@ -34,7 +34,7 @@ async function triggerWorkflow(record: Awaited<ReturnType<typeof createRequest>>
     throw new Error(`SNS Workbench webhook failed (${response.status})${detail ? `: ${detail.slice(0, 300)}` : ""}`);
   }
 
-  return { triggered: true };
+  return { triggered: true, reason: "" };
 }
 
 export async function GET(req: NextRequest) {
