@@ -1,18 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getSessionFromRequest } from "@/lib/auth";
 import { getRequest, listAuditForRequest } from "@/lib/store";
 import { RequestStatusResponse } from "@/lib/types";
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const session = await getSessionFromRequest(req);
+  if (!session) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
   const { id } = await params;
   const record = await getRequest(id);
   if (!record) return NextResponse.json({ error: "Request not found" }, { status: 404 });
+  if (session.role === "patient" && session.patientId !== record.patient_id) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const response: RequestStatusResponse = {
     request_id: record.request_id,
     patient_id: record.patient_id,
+    request: record.request,
     request_type: record.request_type,
     specialty: record.specialty,
     specialist_review_required: record.specialist_review_required,
     document_required: record.document_required,
+    classification_reason: record.classification_reason,
     specialist_review: record.specialist_review,
     hospital_matching: record.hospital_matching,
     referral: record.referral,
