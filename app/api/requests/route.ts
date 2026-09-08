@@ -34,7 +34,7 @@ async function triggerWorkflow(record: Awaited<ReturnType<typeof createRequest>>
     throw new Error(`SNS Workbench webhook failed (${response.status})${detail ? `: ${detail.slice(0, 300)}` : ""}`);
   }
 
-  return { triggered: true, reason: "" };
+  return { triggered: true };
 }
 
 export async function GET(req: NextRequest) {
@@ -72,7 +72,7 @@ export async function POST(req: NextRequest) {
     await appendAudit({
       request_id: record.request_id,
       event_type: workflow.triggered ? "WORKFLOW_TRIGGERED" : "WORKFLOW_NOT_CONFIGURED",
-      detail: workflow.triggered ? "Sent to SNS Workbench for processing" : workflow.reason,
+      detail: workflow.triggered ? "Sent to SNS Workbench for processing" : (workflow.reason ?? "Workflow webhook is not configured"),
       actor: "system",
     });
 
