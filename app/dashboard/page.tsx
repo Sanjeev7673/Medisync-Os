@@ -1,21 +1,15 @@
-"use client";
+import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
+import {
+  dashboardForRole,
+  SESSION_COOKIE,
+  verifySession,
+} from "@/lib/auth";
 
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+export default async function DashboardEntry() {
+  const token = (await cookies()).get(SESSION_COOKIE)?.value;
+  const session = await verifySession(token);
 
-export default function DashboardEntry() {
-  const router = useRouter();
-
-  useEffect(() => {
-    fetch("/api/auth/session").then((r) => r.json()).then((data) => {
-      const role = data?.user?.role;
-      if (role === "hospital") router.replace("/hospital/dashboard");
-      else if (role === "insurance_agent") router.replace("/insurance/dashboard");
-      else if (role === "specialist") router.replace("/specialist/dashboard");
-      else if (role === "admin") router.replace("/admin/dashboard");
-      else router.replace("/patient/dashboard");
-    }).catch(() => router.replace("/login"));
-  }, [router]);
-
-  return <main className="mesh-bg flex min-h-screen items-center justify-center"><div className="glass rounded-3xl px-6 py-5 text-sm font-semibold text-[var(--muted-strong)]">Opening your MediSync workspace…</div></main>;
+  if (!session) redirect("/login");
+  redirect(dashboardForRole(session.role));
 }
