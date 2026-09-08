@@ -31,11 +31,16 @@ async function verifyCognitoIdToken(token: string, config: ReturnType<typeof cog
 
   // Cognito's managed-login domain is different from the user-pool issuer
   // domain that hosts the OIDC signing keys. The ID token contains the issuer;
-  // constrain it to this Cognito region before using it to locate the JWKS.
-  const expectedIssuerPrefix = "https://cognito-idp.ap-south-1.amazonaws.com/";
-  if (!claims.iss.startsWith(expectedIssuerPrefix)) {
+  // constrain it to the Cognito issuer hosts for the configured region before
+  // using it to locate the JWKS.
+  const allowedIssuerPrefixes = [
+    "https://cognito-idp.ap-south-1.amazonaws.com/",
+    "https://issuer-cognito-idp.ap-south-1.amazonaws.com/",
+  ];
+  if (!allowedIssuerPrefixes.some((prefix) => claims.iss!.startsWith(prefix))) {
     throw new Error("Unexpected Cognito token issuer");
   }
+
   const jwksUrl = `${claims.iss.replace(/\/$/, "")}/.well-known/jwks.json`;
   const jwksResponse = await fetch(jwksUrl, { cache: "no-store" });
   if (!jwksResponse.ok) throw new Error("Unable to load Cognito signing keys");
@@ -58,7 +63,7 @@ async function verifyCognitoIdToken(token: string, config: ReturnType<typeof cog
   );
 
   const now = Math.floor(Date.now() / 1000);
-  if (!valid || claims.token_use !== "id" || claims.iss !== claims.iss || claims.aud !== config.clientId || !claims.exp || claims.exp <= now) {
+  if (!valid || claims.token_use !== "id" || claims.aud !== config.clientId || !claims.exp || claims.exp <= now) {
     throw new Error("Invalid Cognito ID token claims");
   }
   return claims;
