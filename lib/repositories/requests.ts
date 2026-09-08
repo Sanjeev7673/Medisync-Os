@@ -2,16 +2,56 @@ import { randomUUID } from "crypto";
 import { getDb } from "@/lib/db";
 import type { Session } from "@/lib/auth";
 import type { PatientRequest, RequestType } from "@/lib/types";
+import { appendAudit } from "@/lib/repositories/audit";
 
+type RequestStage = "CREATED" | "CLASSIFIED" | "SPECIALIST_REVIEW" | "HOSPITAL_MATCHING" | "REFERRAL" | "APPOINTMENT_PENDING" | "SCHEDULED" | "COMPLETED" | "REJECTED" | "CANCELLED";
 type RequestRow = {
-  id: string; request_id: string; patient_id: string; request_type: RequestType | null; description: string;
-  request_source: PatientRequest["request_source"]; document_uploaded: boolean; workflow_stage: string;
-  ai_classification: Record<string, unknown>; ai_confidence: number | null; ai_reason: string | null;
-  created_at: string; updated_at: string;
+  id: string; request_id: string; patient_id: string; assigned_specialist_id: string | null; request_type: RequestType | null; description: string;
+  request_source: PatientRequest["request_source"]; document_uploaded: boolean; workflow_stage: RequestStage;
+  ai_classification: Record<string, unknown>; ai_confidence: number | null; ai_reason: string | null; created_at: string; updated_at: string;
+};
+
+const transitions: Record<RequestStage, RequestStage[]> = {
+  CREATED: ["CLASSIFIED", "CANCELLED"],
+  CLASSIFIED: ["SPECIALIST_REVIEW", "HOSPITAL_MATCHING", "REJECTED", "CANCELLED"],
+  SPECIALIST_REVIEW: ["HOSPITAL_MATCHING", "REJECTED", "CANCELLED"],
+  HOSPITAL_MATCHING: ["REFERRAL", "REJECTED", "CANCELLED"],
+  REFERRAL: ["APPOINTMENT_PENDING", "REJECTED", "CANCELLED"],
+  APPOINTMENT_PENDING: ["SCHEDULED", "CANCELLED"],
+  SCHEDULED: ["COMPLETED", "CANCELLED"],
+  COMPLETED: [], REJECTED: [], CANCELLED: [],
 };
 
 function assertPatientOwner(session: Session, patientId: string) {
   if (session.role !== "patient" || session.sub !== patientId || session.patientId !== patientId) throw new Error("FORBIDDEN");
+}
+
+async function getRequestRow(requestId: string) {
+  const { data, error } = await getDb().from("requests").select("*").eq("request_id", requestId).maybeSingle<RequestRow>();
+  if (error) throw error;
+  return data;
+}
+
+async function assertWorkflowActor(session: Session, row: RequestRow, nextStage: RequestStage) {
+  if (session.role === "admin") return;
+  if (session.role === "patient") throw new Error("FORBIDDEN");
+  if (session.role === "specialist") {
+    if (row.workflow_stage !== "SPECIALIST_REVIEW" || row.assigned_specialist_id !== session.sub) throw new Error("FORBIDDEN");
+    if (!["HOSPITAL_MATCHING", "REJECTED", "CANCELLED"].includes(nextStage)) throw new Error("FORBIDDEN");
+    return;
+  }
+  if (session.role === "hospital") {
+    if (!["HOSPITAL_MATCHING", "REFERRAL", "APPOINTMENT_PENDING", "SCHEDULED", "REJECTED", "CANCELLED"].includes(nextStage)) throw new Error("FORBIDDEN");
+    const { data: hospital, error } = await getDb().from("hospitals").select("id, organization_id").eq("id", row.assigned_specialist_id ?? "").maybeSingle();
+    if (error) throw error;
+    void hospital;
+    if (!session.organizationId) throw new Error("FORBIDDEN");
+    const { data: referralHospital, error: hospitalError } = await getDb().from("referrals").select("hospital_id, hospitals!inner(organization_id)").eq("request_id", row.id).maybeSingle<{ hospital_id: string; hospitals: { organization_id: string | null } }>();
+    if (hospitalError) throw hospitalError;
+    if (!referralHospital || referralHospital.hospitals.organization_id !== session.organizationId) throw new Error("FORBIDDEN");
+    return;
+  }
+  throw new Error("FORBIDDEN");
 }
 
 function toPatientRequest(row: RequestRow): PatientRequest {
@@ -21,7 +61,7 @@ function toPatientRequest(row: RequestRow): PatientRequest {
     request_type: row.request_type, specialty: typeof ai.specialty === "string" ? ai.specialty : null,
     specialist_review_required: typeof ai.specialist_review_required === "boolean" ? ai.specialist_review_required : null,
     document_required: typeof ai.document_required === "boolean" ? ai.document_required : null, classification_reason: row.ai_reason,
-    specialist_review: { status: row.workflow_stage === "SPECIALIST_REVIEW" ? "PENDING" : null, reviewed_by: null, reviewed_at: null, notes: null },
+    specialist_review: { status: row.workflow_stage === "SPECIALIST_REVIEW" ? "PENDING" : null, reviewed_by: row.assigned_specialist_id, reviewed_at: null, notes: null },
     hospital_matching: { status: row.workflow_stage === "HOSPITAL_MATCHING" ? "IN_PROGRESS" : null, recommendations: [] },
     referral: { status: row.workflow_stage === "REFERRAL" ? "CREATED" : null, referral_id: null, hospital_id: null },
     appointment: { status: row.workflow_stage === "APPOINTMENT_PENDING" ? "PENDING" : row.workflow_stage === "SCHEDULED" ? "SCHEDULED" : null, scheduled_at: null },
@@ -34,12 +74,10 @@ export async function createRequest(session: Session, input: { request: string; 
   if (session.role !== "patient" || !session.patientId || session.sub !== session.patientId) throw new Error("FORBIDDEN");
   const description = input.request.trim();
   if (!description) throw new Error("INVALID_REQUEST");
-  const row = {
-    request_id: `REQ-${randomUUID().slice(0, 8).toUpperCase()}`, patient_id: session.patientId, description,
-    request_source: input.request_source ?? "patient_portal", document_uploaded: Boolean(input.document_uploaded),
-  };
+  const row = { request_id: `REQ-${randomUUID().slice(0, 8).toUpperCase()}`, patient_id: session.patientId, description, request_source: input.request_source ?? "patient_portal", document_uploaded: Boolean(input.document_uploaded) };
   const { data, error } = await getDb().from("requests").insert(row).select("*").single<RequestRow>();
   if (error) throw error;
+  await appendAudit({ actorUserId: session.sub, actorRole: session.role, action: "REQUEST_CREATED", entityType: "request", entityId: data.id, requestId: data.id, newState: "CREATED", metadata: { request_id: data.request_id, request_source: data.request_source } });
   return { ...toPatientRequest(data), db_id: data.id };
 }
 
@@ -58,19 +96,38 @@ export async function getRequestForPatient(session: Session, requestId: string) 
   return data ? toPatientRequest(data) : null;
 }
 
-export async function advanceRequest(session: Session, requestId: string, workflowStage: RequestRow["workflow_stage"]) {
-  if (!session.patientId || session.sub !== session.patientId) throw new Error("FORBIDDEN");
-  const allowed = ["CREATED", "CLASSIFIED", "SPECIALIST_REVIEW", "HOSPITAL_MATCHING", "REFERRAL", "APPOINTMENT_PENDING", "SCHEDULED", "COMPLETED", "REJECTED", "CANCELLED"];
-  if (!allowed.includes(workflowStage)) throw new Error("INVALID_STAGE");
-  const { data, error } = await getDb().from("requests").update({ workflow_stage: workflowStage }).eq("request_id", requestId).eq("patient_id", session.patientId).select("*").single<RequestRow>();
+export async function assignSpecialist(session: Session, requestId: string, specialistId: string) {
+  if (!["admin", "hospital"].includes(session.role)) throw new Error("FORBIDDEN");
+  const current = await getRequestRow(requestId);
+  if (!current) throw new Error("NOT_FOUND");
+  const { data: specialist, error: specialistError } = await getDb().from("specialists").select("id, credential_status, review_queue_status").eq("id", specialistId).maybeSingle<{ id: string; credential_status: string; review_queue_status: string }>();
+  if (specialistError) throw specialistError;
+  if (!specialist || specialist.credential_status !== "VERIFIED" || specialist.review_queue_status === "INACTIVE") throw new Error("INVALID_SPECIALIST");
+  const { data, error } = await getDb().from("requests").update({ assigned_specialist_id: specialistId }).eq("id", current.id).eq("updated_at", current.updated_at).select("*").single<RequestRow>();
   if (error) throw error;
+  await appendAudit({ actorUserId: session.sub, actorRole: session.role, action: "SPECIALIST_ASSIGNED", entityType: "request", entityId: data.id, requestId: data.id, previousState: current.assigned_specialist_id, newState: specialistId });
+  return toPatientRequest(data);
+}
+
+export async function advanceRequest(session: Session, requestId: string, workflowStage: RequestStage) {
+  const current = await getRequestRow(requestId);
+  if (!current) throw new Error("NOT_FOUND");
+  if (!transitions[current.workflow_stage].includes(workflowStage)) throw new Error("INVALID_TRANSITION");
+  await assertWorkflowActor(session, current, workflowStage);
+  const { data, error } = await getDb().from("requests").update({ workflow_stage: workflowStage }).eq("id", current.id).eq("workflow_stage", current.workflow_stage).eq("updated_at", current.updated_at).select("*").single<RequestRow>();
+  if (error) throw error;
+  await appendAudit({ actorUserId: session.sub, actorRole: session.role, action: "REQUEST_STAGE_CHANGED", entityType: "request", entityId: data.id, requestId: data.id, previousState: current.workflow_stage, newState: workflowStage });
   return toPatientRequest(data);
 }
 
 export async function updateClassification(session: Session, requestId: string, input: { requestType: RequestType; specialty?: string; specialistReviewRequired?: boolean; documentRequired?: boolean; reason?: string; confidence?: number }) {
   if (!session.patientId || session.sub !== session.patientId) throw new Error("FORBIDDEN");
+  const current = await getRequestRow(requestId);
+  if (!current || current.patient_id !== session.patientId) throw new Error("FORBIDDEN");
+  if (current.workflow_stage !== "CREATED") throw new Error("INVALID_TRANSITION");
   const ai_classification = { request_type: input.requestType, specialty: input.specialty ?? "", specialist_review_required: Boolean(input.specialistReviewRequired), document_required: Boolean(input.documentRequired) };
-  const { data, error } = await getDb().from("requests").update({ request_type: input.requestType, workflow_stage: "CLASSIFIED", ai_classification, ai_confidence: input.confidence ?? null, ai_reason: input.reason ?? null }).eq("request_id", requestId).eq("patient_id", session.patientId).select("*").single<RequestRow>();
+  const { data, error } = await getDb().from("requests").update({ request_type: input.requestType, workflow_stage: "CLASSIFIED", ai_classification, ai_confidence: input.confidence ?? null, ai_reason: input.reason ?? null }).eq("id", current.id).eq("workflow_stage", "CREATED").eq("updated_at", current.updated_at).select("*").single<RequestRow>();
   if (error) throw error;
+  await appendAudit({ actorUserId: session.sub, actorRole: session.role, action: "REQUEST_CLASSIFIED", entityType: "request", entityId: data.id, requestId: data.id, previousState: "CREATED", newState: "CLASSIFIED", metadata: { request_type: input.requestType, confidence: input.confidence ?? null } });
   return toPatientRequest(data);
 }
