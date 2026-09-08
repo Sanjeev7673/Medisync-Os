@@ -1,0 +1,12 @@
+revoke execute on function public.create_request_with_audit(text,uuid,text,text,boolean,uuid,text) from public, anon, authenticated;
+revoke execute on function public.update_request_stage_with_audit(uuid,text,timestamptz,text,uuid,text) from public, anon, authenticated;
+revoke execute on function public.assign_specialist_with_audit(uuid,timestamptz,uuid,uuid,text) from public, anon, authenticated;
+revoke execute on function public.classify_request_with_audit(uuid,timestamptz,text,jsonb,numeric,text,uuid,text) from public, anon, authenticated;
+revoke execute on function public.create_referral_with_audit(text,uuid,uuid,uuid,text,text,uuid,text) from public, anon, authenticated;
+revoke execute on function public.transition_referral_with_audit(uuid,text,timestamptz,text,timestamptz,timestamptz,timestamptz,uuid,text) from public, anon, authenticated;
+grant execute on function public.create_request_with_audit(text,uuid,text,text,boolean,uuid,text) to service_role;
+grant execute on function public.update_request_stage_with_audit(uuid,text,timestamptz,text,uuid,text) to service_role;
+grant execute on function public.assign_specialist_with_audit(uuid,timestamptz,uuid,uuid,text) to service_role;
+grant execute on function public.classify_request_with_audit(uuid,timestamptz,text,jsonb,numeric,text,uuid,text) to service_role;
+grant execute on function public.create_referral_with_audit(text,uuid,uuid,uuid,text,text,uuid,text) to service_role;
+grant execute on function public.transition_referral_with_audit(uuid,text,timestamptz,text,timestamptz,timestamptz,timestamptz,uuid,text) to service_role;
