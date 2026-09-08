@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cognitoConfig, randomState, ROLE_HINT_COOKIE, STATE_COOKIE, UserRole } from "@/lib/auth";
+import { cognitoConfig, createOAuthState, ROLE_HINT_COOKIE, STATE_COOKIE, UserRole } from "@/lib/auth";
 
 const selectableRoles: UserRole[] = ["patient", "hospital", "insurance_agent"];
 
@@ -7,7 +7,7 @@ export async function GET(req: NextRequest) {
   const config = cognitoConfig();
   const requestedRole = req.nextUrl.searchParams.get("role") as UserRole | null;
   const role = requestedRole && selectableRoles.includes(requestedRole) ? requestedRole : "patient";
-  const state = randomState();
+  const state = await createOAuthState(role);
   const url = new URL(`${config.domain}/oauth2/authorize`);
   url.searchParams.set("response_type", "code");
   url.searchParams.set("client_id", config.clientId);
@@ -17,6 +17,8 @@ export async function GET(req: NextRequest) {
   url.searchParams.set("prompt", "login");
 
   const response = NextResponse.redirect(url);
+  // Keep these cookies only for compatibility/cleanup. The signed state itself
+  // carries the role and protects against stale or cross-tab state mismatches.
   response.cookies.set(STATE_COOKIE, state, {
     httpOnly: true,
     secure: true,
