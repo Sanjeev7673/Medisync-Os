@@ -21,6 +21,7 @@ export async function middleware(req: NextRequest) {
   if (pathname.startsWith("/insurance/") && session.role !== "insurance_agent") return NextResponse.redirect(new URL("/dashboard", req.url));
   if (pathname.startsWith("/specialist/") && session.role !== "specialist") return NextResponse.redirect(new URL("/dashboard", req.url));
   if (pathname.startsWith("/admin/") && session.role !== "admin") return NextResponse.redirect(new URL("/dashboard", req.url));
+  if ((pathname.startsWith("/requests") || pathname.startsWith("/documents") || pathname.startsWith("/appointments")) && session.role !== "patient") return NextResponse.redirect(new URL("/dashboard", req.url));
 
   return NextResponse.next();
 }
