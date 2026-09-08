@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 
 export const SESSION_COOKIE = "medisync_session";
+export const SESSION_MAX_AGE = 60 * 60 * 8;
 
 export type UserRole =
   | "patient"
@@ -9,7 +10,7 @@ export type UserRole =
   | "specialist"
   | "admin";
 
-type Session = {
+export type Session = {
   sub: string;
   email?: string;
   name?: string;
@@ -18,25 +19,26 @@ type Session = {
   hospitalId?: string;
   insuranceAgentId?: string;
   exp: number;
+  iat: number;
+};
+
+const ROLE_DASHBOARDS: Record<UserRole, string> = {
+  patient: "/patient/dashboard",
+  specialist: "/specialist/dashboard",
+  hospital: "/hospital/dashboard",
+  insurance_agent: "/insurance/dashboard",
+  admin: "/admin/dashboard",
 };
 
 function required(name: string) {
   const value = process.env[name];
-
-  if (!value) {
-    throw new Error(`Missing environment variable: ${name}`);
-  }
-
+  if (!value) throw new Error(`Missing environment variable: ${name}`);
   return value;
 }
 
 function toBase64Url(bytes: Uint8Array) {
   let binary = "";
-
-  for (const byte of bytes) {
-    binary += String.fromCharCode(byte);
-  }
-
+  for (const byte of bytes) binary += String.fromCharCode(byte);
   return btoa(binary)
     .replace(/\+/g, "-")
     .replace(/\//g, "_")
@@ -44,84 +46,103 @@ function toBase64Url(bytes: Uint8Array) {
 }
 
 function fromBase64Url(value: string) {
-  const padded =
-    value.replace(/-/g, "+").replace(/_/g, "/") + "===";
-
-  const binary = atob(
-    padded.slice(0, padded.length - (padded.length % 4)),
-  );
-
+  const padded = value.replace(/-/g, "+").replace(/_/g, "/") + "===";
+  const binary = atob(padded.slice(0, padded.length - (padded.length % 4)));
   return Uint8Array.from(binary, (char) => char.charCodeAt(0));
 }
 
-async function getHmacKey() {
+async function deriveKey(name: "encrypt" | "sign", usage: KeyUsage[]) {
+  const material = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(`${required("MEDISYNC_SESSION_SECRET")}:${name}`),
+  );
+
   return crypto.subtle.importKey(
     "raw",
-    new TextEncoder().encode(
-      required("MEDISYNC_SESSION_SECRET"),
-    ),
-    {
-      name: "HMAC",
-      hash: "SHA-256",
-    },
+    material,
+    { name: "AES-GCM" },
+    false,
+    usage,
+  );
+}
+
+async function getSigningKey() {
+  const material = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(`${required("MEDISYNC_SESSION_SECRET")}:sign`),
+  );
+
+  return crypto.subtle.importKey(
+    "raw",
+    material,
+    { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign", "verify"],
   );
 }
 
-export async function createSession(
-  input: Omit<Session, "exp">,
-) {
-  const payload: Session = {
-    ...input,
-    exp: Math.floor(Date.now() / 1000) + 60 * 60 * 8,
-  };
-
-  const encoded = toBase64Url(
-    new TextEncoder().encode(JSON.stringify(payload)),
+async function encrypt(payload: Session) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const plaintext = new TextEncoder().encode(JSON.stringify(payload));
+  const ciphertext = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv },
+    await deriveKey("encrypt", ["encrypt"]),
+    plaintext,
   );
-
-  const signature = await crypto.subtle.sign(
-    "HMAC",
-    await getHmacKey(),
-    new TextEncoder().encode(encoded),
-  );
-
-  return `${encoded}.${toBase64Url(
-    new Uint8Array(signature),
-  )}`;
+  return `${toBase64Url(iv)}.${toBase64Url(new Uint8Array(ciphertext))}`;
 }
 
-export async function verifySession(
-  token: string | undefined,
-): Promise<Session | null> {
+async function decrypt(token: string) {
+  const [ivPart, ciphertextPart] = token.split(".");
+  if (!ivPart || !ciphertextPart) return null;
+
+  const plaintext = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: fromBase64Url(ivPart) },
+    await deriveKey("encrypt", ["decrypt"]),
+    fromBase64Url(ciphertextPart),
+  );
+
+  return JSON.parse(new TextDecoder().decode(plaintext)) as Session;
+}
+
+export async function createSession(input: Omit<Session, "exp" | "iat">) {
+  const now = Math.floor(Date.now() / 1000);
+  const payload: Session = {
+    ...input,
+    iat: now,
+    exp: now + SESSION_MAX_AGE,
+  };
+
+  const encrypted = await encrypt(payload);
+  const signature = await crypto.subtle.sign(
+    "HMAC",
+    await getSigningKey(),
+    new TextEncoder().encode(encrypted),
+  );
+
+  return `${encrypted}.${toBase64Url(new Uint8Array(signature))}`;
+}
+
+export async function verifySession(token: string | undefined): Promise<Session | null> {
   if (!token) return null;
 
-  const [encoded, signature] = token.split(".");
+  const parts = token.split(".");
+  if (parts.length !== 3) return null;
 
-  if (!encoded || !signature) return null;
+  const encrypted = `${parts[0]}.${parts[1]}`;
+  const signature = parts[2];
 
   try {
     const valid = await crypto.subtle.verify(
       "HMAC",
-      await getHmacKey(),
+      await getSigningKey(),
       fromBase64Url(signature),
-      new TextEncoder().encode(encoded),
+      new TextEncoder().encode(encrypted),
     );
-
     if (!valid) return null;
 
-    const payload = JSON.parse(
-      new TextDecoder().decode(
-        fromBase64Url(encoded),
-      ),
-    ) as Session;
-
-    if (
-      !payload.sub ||
-      !payload.exp ||
-      payload.exp <= Math.floor(Date.now() / 1000)
-    ) {
+    const payload = await decrypt(encrypted);
+    if (!payload?.sub || !payload.exp || payload.exp <= Math.floor(Date.now() / 1000)) {
       return null;
     }
 
@@ -131,10 +152,52 @@ export async function verifySession(
   }
 }
 
-export async function getSessionFromRequest(
+export async function getSessionFromRequest(req: NextRequest) {
+  return verifySession(req.cookies.get(SESSION_COOKIE)?.value);
+}
+
+export function dashboardForRole(role: UserRole) {
+  return ROLE_DASHBOARDS[role];
+}
+
+export function hasRole(session: Session | null, allowedRoles: readonly UserRole[]) {
+  return !!session && allowedRoles.includes(session.role);
+}
+
+export async function requireRole(
   req: NextRequest,
+  allowedRoles: readonly UserRole[],
 ) {
-  return verifySession(
-    req.cookies.get(SESSION_COOKIE)?.value,
-  );
+  const session = await getSessionFromRequest(req);
+
+  if (!session) {
+    return { ok: false as const, status: 401, error: "Authentication required" };
+  }
+
+  if (!hasRole(session, allowedRoles)) {
+    return { ok: false as const, status: 403, error: "Forbidden" };
+  }
+
+  return { ok: true as const, session };
+}
+
+export function verifyResourceOwnership(
+  session: Session,
+  resourceOwnerId: string,
+) {
+  if (session.role === "admin" || session.role === "specialist") return true;
+  if (session.role === "patient") return session.patientId === resourceOwnerId;
+  if (session.role === "hospital") return session.hospitalId === resourceOwnerId;
+  if (session.role === "insurance_agent") return session.insuranceAgentId === resourceOwnerId;
+  return false;
+}
+
+export function sessionCookieOptions() {
+  return {
+    httpOnly: true,
+    secure: true,
+    sameSite: "strict" as const,
+    path: "/",
+    maxAge: SESSION_MAX_AGE,
+  };
 }
