@@ -1,140 +1,80 @@
-import { NextRequest } from "next/server";
+import { randomUUID } from "crypto";
+import { AuditEvent, PatientRequest, WorkflowStatus } from "./types";
 
-export const SESSION_COOKIE = "medisync_session";
+const requests = new Map<string, PatientRequest>();
+const auditLog: AuditEvent[] = [];
 
-export type UserRole =
-  | "patient"
-  | "hospital"
-  | "insurance_agent"
-  | "specialist"
-  | "admin";
+function now() { return new Date().toISOString(); }
 
-type Session = {
-  sub: string;
-  email?: string;
-  name?: string;
-  role: UserRole;
-  patientId?: string;
-  hospitalId?: string;
-  insuranceAgentId?: string;
-  exp: number;
-};
-
-function required(name: string) {
-  const value = process.env[name];
-
-  if (!value) {
-    throw new Error(`Missing environment variable: ${name}`);
-  }
-
-  return value;
-}
-
-function toBase64Url(bytes: Uint8Array) {
-  let binary = "";
-
-  for (const byte of bytes) {
-    binary += String.fromCharCode(byte);
-  }
-
-  return btoa(binary)
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/g, "");
-}
-
-function fromBase64Url(value: string) {
-  const padded =
-    value.replace(/-/g, "+").replace(/_/g, "/") + "===";
-
-  const binary = atob(
-    padded.slice(0, padded.length - (padded.length % 4)),
-  );
-
-  return Uint8Array.from(binary, (char) => char.charCodeAt(0));
-}
-
-async function getHmacKey() {
-  return crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(
-      required("MEDISYNC_SESSION_SECRET"),
-    ),
-    {
-      name: "HMAC",
-      hash: "SHA-256",
-    },
-    false,
-    ["sign", "verify"],
-  );
-}
-
-export async function createSession(
-  input: Omit<Session, "exp">,
-) {
-  const payload: Session = {
-    ...input,
-    exp: Math.floor(Date.now() / 1000) + 60 * 60 * 8,
+function seed() {
+  if (requests.size > 0) return;
+  const created = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const updated = now();
+  const seeded: PatientRequest = {
+    request_id: "REQ-1001",
+    patient_id: "P1001",
+    request: "I have a heart-related health concern and need to consult a cardiologist. Please help me find the appropriate specialist.",
+    request_source: "patient_portal",
+    document_uploaded: false,
+    request_type: "SPECIALIST_REVIEW",
+    specialty: "Cardiology",
+    specialist_review_required: true,
+    document_required: false,
+    classification_reason: "Patient requests assistance in finding a cardiologist for a heart-related concern.",
+    specialist_review: { status: "APPROVED", reviewed_by: "specialist-demo", reviewed_at: updated, notes: "Specialist review approved for cardiology routing." },
+    hospital_matching: { status: "COMPLETED", recommendations: [{ hospital_id: "HOSP-001", hospital_name: "MediSync General Hospital", match_score: 94, matched_capabilities: ["Cardiology", "Cardiac diagnostics", "Specialist consultation"], missing_capabilities: [], reason: "Strong capability match for cardiology specialist coordination." }] },
+    referral: { status: "CREATED", referral_id: "REF-1001", hospital_id: "HOSP-001" },
+    appointment: { status: "PENDING", scheduled_at: null },
+    workflow_status: "APPOINTMENT_PENDING",
+    created_at: created,
+    updated_at: updated,
   };
-
-  const encoded = toBase64Url(
-    new TextEncoder().encode(JSON.stringify(payload)),
-  );
-
-  const signature = await crypto.subtle.sign(
-    "HMAC",
-    await getHmacKey(),
-    new TextEncoder().encode(encoded),
-  );
-
-  return `${encoded}.${toBase64Url(
-    new Uint8Array(signature),
-  )}`;
+  requests.set(seeded.request_id, seeded);
+  auditLog.push({ audit_id: randomUUID(), request_id: seeded.request_id, event_type: "REQUEST_CREATED", detail: "Seeded demo request created.", actor: "system", created_at: created });
 }
 
-export async function verifySession(
-  token: string | undefined,
-): Promise<Session | null> {
-  if (!token) return null;
+seed();
 
-  const [encoded, signature] = token.split(".");
-
-  if (!encoded || !signature) return null;
-
-  try {
-    const valid = await crypto.subtle.verify(
-      "HMAC",
-      await getHmacKey(),
-      fromBase64Url(signature),
-      new TextEncoder().encode(encoded),
-    );
-
-    if (!valid) return null;
-
-    const payload = JSON.parse(
-      new TextDecoder().decode(
-        fromBase64Url(encoded),
-      ),
-    ) as Session;
-
-    if (
-      !payload.sub ||
-      !payload.exp ||
-      payload.exp <= Math.floor(Date.now() / 1000)
-    ) {
-      return null;
-    }
-
-    return payload;
-  } catch {
-    return null;
-  }
+export async function listRequestsForPatient(patientId: string) {
+  seed();
+  return Array.from(requests.values()).filter((request) => request.patient_id === patientId);
 }
 
-export async function getSessionFromRequest(
-  req: NextRequest,
-) {
-  return verifySession(
-    req.cookies.get(SESSION_COOKIE)?.value,
-  );
+export async function getRequest(requestId: string) {
+  seed();
+  return requests.get(requestId) ?? null;
+}
+
+export async function putRequest(request: PatientRequest) {
+  seed();
+  requests.set(request.request_id, request);
+  return request;
+}
+
+export async function createRequest(input: Omit<PatientRequest, "request_id" | "created_at" | "updated_at">) {
+  seed();
+  const timestamp = now();
+  const request: PatientRequest = { ...input, request_id: `REQ-${Date.now()}`, created_at: timestamp, updated_at: timestamp };
+  requests.set(request.request_id, request);
+  await appendAudit(request.request_id, "REQUEST_CREATED", "Request created.", "patient");
+  return request;
+}
+
+export async function appendAudit(requestId: string, eventType: string, detail: string, actor = "system") {
+  const event: AuditEvent = { audit_id: randomUUID(), request_id: requestId, event_type: eventType, detail, actor, created_at: now() };
+  auditLog.push(event);
+  return event;
+}
+
+export async function listAuditForRequest(requestId: string) {
+  seed();
+  return auditLog.filter((event) => event.request_id === requestId);
+}
+
+export async function updateRequestStatus(requestId: string, workflowStatus: WorkflowStatus) {
+  const request = await getRequest(requestId);
+  if (!request) return null;
+  const updated = { ...request, workflow_status: workflowStatus, updated_at: now() };
+  requests.set(requestId, updated);
+  return updated;
 }
