@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 const NAV = [
-  { href: "/dashboard", label: "Dashboard" },
+  { href: "/dashboard", label: "Overview" },
   { href: "/requests/new", label: "New request" },
   { href: "/documents", label: "Documents" },
   { href: "/appointments", label: "Appointments" },
@@ -25,8 +25,8 @@ export default function PatientShell({ children }: { children: React.ReactNode }
           ))}
         </nav>
         <div className="mt-auto pt-8 border-t border-[var(--border)]">
-          <p className="text-xs text-[var(--muted)] leading-relaxed">Signed in as <span className="font-medium text-[var(--ink)]">P1001</span></p>
-          <Link href="/login" className="text-xs text-[var(--care)] hover:underline">Sign out</Link>
+          <p className="text-xs text-[var(--muted)] leading-relaxed">Your MediSync account</p>
+          <Link href="/api/auth/logout" className="text-xs text-[var(--care)] hover:underline">Sign out securely</Link>
         </div>
       </aside>
       <main className="flex-1 px-6 py-8 md:px-12 md:py-10 max-w-5xl">{children}</main>
