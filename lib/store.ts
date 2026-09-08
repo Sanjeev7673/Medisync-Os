@@ -51,17 +51,65 @@ export async function putRequest(request: PatientRequest) {
   return request;
 }
 
-export async function createRequest(input: Omit<PatientRequest, "request_id" | "created_at" | "updated_at">) {
+type CreateRequestInput = {
+  patient_id: string;
+  request: string;
+  request_source: PatientRequest["request_source"];
+  document_uploaded: boolean;
+} & Partial<Omit<PatientRequest, "request_id" | "created_at" | "updated_at" | "patient_id" | "request" | "request_source" | "document_uploaded">>;
+
+export async function createRequest(input: CreateRequestInput) {
   seed();
   const timestamp = now();
-  const request: PatientRequest = { ...input, request_id: `REQ-${Date.now()}`, created_at: timestamp, updated_at: timestamp };
+  const request: PatientRequest = {
+    request_id: `REQ-${Date.now()}`,
+    patient_id: input.patient_id,
+    request: input.request,
+    request_source: input.request_source,
+    document_uploaded: input.document_uploaded,
+    request_type: input.request_type ?? null,
+    specialty: input.specialty ?? null,
+    specialist_review_required: input.specialist_review_required ?? null,
+    document_required: input.document_required ?? null,
+    classification_reason: input.classification_reason ?? null,
+    specialist_review: input.specialist_review ?? { status: null, reviewed_by: null, reviewed_at: null, notes: null },
+    hospital_matching: input.hospital_matching ?? { status: null, recommendations: [] },
+    referral: input.referral ?? { status: null, referral_id: null, hospital_id: null },
+    appointment: input.appointment ?? { status: null, scheduled_at: null },
+    workflow_status: input.workflow_status ?? "CREATED",
+    created_at: timestamp,
+    updated_at: timestamp,
+  };
   requests.set(request.request_id, request);
   await appendAudit(request.request_id, "REQUEST_CREATED", "Request created.", "patient");
   return request;
 }
 
-export async function appendAudit(requestId: string, eventType: string, detail: string, actor = "system") {
-  const event: AuditEvent = { audit_id: randomUUID(), request_id: requestId, event_type: eventType, detail, actor, created_at: now() };
+type AuditInput = {
+  request_id: string;
+  event_type: string;
+  detail: string;
+  actor?: string;
+};
+
+export async function appendAudit(
+  requestIdOrInput: string | AuditInput,
+  eventType?: string,
+  detail?: string,
+  actor = "system",
+) {
+  const input: AuditInput = typeof requestIdOrInput === "string"
+    ? { request_id: requestIdOrInput, event_type: eventType ?? "", detail: detail ?? "", actor }
+    : requestIdOrInput;
+
+  const event: AuditEvent = {
+    audit_id: randomUUID(),
+    request_id: input.request_id,
+    event_type: input.event_type,
+    detail: input.detail,
+    actor: input.actor ?? "system",
+    created_at: now(),
+  };
   auditLog.push(event);
   return event;
 }
