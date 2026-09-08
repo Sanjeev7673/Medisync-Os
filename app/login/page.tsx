@@ -44,9 +44,18 @@ function LoginForm() {
           <p className="mb-5 inline-flex items-center gap-2 rounded-full border border-black/5 bg-white/60 px-4 py-2 text-xs font-bold uppercase tracking-[.16em] text-[var(--care)] backdrop-blur">AI-assisted · Human-led care</p>
           <h1 className="max-w-2xl font-display text-6xl font-extrabold leading-[.98] tracking-[-.045em] xl:text-7xl">Healthcare coordination that feels <span className="text-[var(--care)]">human.</span></h1>
           <p className="mt-7 max-w-xl text-lg leading-8 text-[var(--muted-strong)]">One connected care network where patients, hospitals and insurance teams can move the right information to the right next step.</p>
-          <div className="relative mt-12 h-44 max-w-xl">
-            <div className="float-card glass absolute left-0 top-5 w-64 rounded-3xl p-4"><div className="flex items-center gap-3"><div className="h-10 w-10 rounded-2xl bg-[var(--care-soft)] text-center leading-10">✦</div><div><p className="text-xs font-bold text-[var(--muted)]">AI routing</p><p className="font-display text-sm font-bold">Cardiology request</p></div></div><div className="mt-4 h-1.5 overflow-hidden rounded-full bg-black/5"><div className="h-full w-3/4 rounded-full bg-[var(--care)]" /></div></div>
-            <div className="float-card-delay glass absolute right-2 top-0 w-56 rounded-3xl p-4"><p className="text-xs font-bold text-[var(--muted)]">Connected workflow</p><div className="mt-3 flex items-center gap-2"><span className="h-7 w-7 rounded-full bg-[var(--success-soft)] text-center text-xs leading-7 text-[var(--success)]">✓</span><span className="h-px flex-1 bg-[var(--blue-soft)]"/><span className="h-7 w-7 rounded-full bg-[var(--care-soft)] text-center text-xs leading-7 text-[var(--care)]">2</span><span className="h-px flex-1 bg-black/10"/><span className="h-7 w-7 rounded-full bg-black/5 text-center text-xs leading-7 text-[var(--muted)]">3</span></div></div>
+          <div className="mt-12 grid max-w-xl gap-3 sm:grid-cols-3">
+            {[
+              ["01", "Your input", "Start with the request or task you need to handle."],
+              ["02", "AI assistance", "MediSync organizes the information and next step."],
+              ["03", "Human control", "Authorized teams review and act on the workflow."],
+            ].map(([number, title, description]) => (
+              <div key={number} className="float-card glass rounded-3xl p-4">
+                <span className="text-[10px] font-bold tracking-[.16em] text-[var(--care)]">{number}</span>
+                <p className="mt-2 font-display text-sm font-extrabold">{title}</p>
+                <p className="mt-1 text-xs leading-5 text-[var(--muted)]">{description}</p>
+              </div>
+            ))}
           </div>
         </div>
         <div className="reveal reveal-delay-1 mx-auto w-full max-w-xl">
@@ -58,7 +67,7 @@ function LoginForm() {
               </div>
               <a href={`/api/auth/login?role=${role}`} className="group mt-5 flex w-full items-center justify-between rounded-2xl bg-[var(--ink)] px-5 py-4 text-sm font-bold text-white shadow-xl shadow-slate-900/10 transition-transform hover:-translate-y-0.5"><span>Continue as {roles.find((item) => item.id === role)?.label}</span><span className="text-lg transition-transform group-hover:translate-x-1">→</span></a>
               {errorMessage && <div className="mt-4 rounded-2xl bg-[var(--danger-soft)] px-4 py-3 text-xs font-semibold leading-5 text-[var(--danger)]">{errorMessage}</div>}
-              <div className="mt-6 flex items-start gap-3 rounded-2xl bg-[var(--care-soft)]/65 p-4"><span className="mt-0.5 text-[var(--care)]">◉</span><p className="text-xs leading-5 text-[var(--muted-strong)]"><strong>Secure by design.</strong> Workspace selection only guides routing. The authenticated Cognito role remains the authorization source for protected dashboards.</p></div>
+              <div className="mt-6 flex items-start gap-3 rounded-2xl bg-[var(--care-soft)]/65 p-4"><span className="mt-0.5 text-[var(--care)]">◉</span><p className="text-xs leading-5 text-[var(--muted-strong)]"><strong>Secure by design.</strong> Workspace selection only guides routing. The authenticated role remains the authorization source for protected dashboards.</p></div>
               <p className="mt-7 text-center text-[10px] font-semibold uppercase tracking-[.16em] text-[var(--muted)]">MediSync · Connected healthcare network</p>
             </div>
           </div>
