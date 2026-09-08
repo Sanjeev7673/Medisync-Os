@@ -1,46 +1,57 @@
 import { NextRequest, NextResponse } from "next/server";
-import {
-  createSession,
-  dashboardForRole,
-  sessionCookieOptions,
-  SESSION_COOKIE,
-  UserRole,
-} from "@/lib/auth";
+import bcrypt from "bcryptjs";
+import { createSession, dashboardForRole, sessionCookieOptions, SESSION_COOKIE, UserRole } from "@/lib/auth";
+import { DbUser, getDb } from "@/lib/db";
 
-// Temporary demo identities. These are not production authentication credentials.
-// A persistent user/credential store is required before this endpoint is production-ready.
-const selectableRoles: UserRole[] = [
-  "patient",
-  "hospital",
-  "insurance_agent",
-  "specialist",
-  "admin",
-];
+const roleMap: Record<DbUser["role"], UserRole> = {
+  PATIENT: "patient",
+  SPECIALIST: "specialist",
+  HOSPITAL: "hospital",
+  INSURANCE: "insurance_agent",
+  ADMIN: "admin",
+};
 
-export async function GET(req: NextRequest) {
-  const requestedRole = req.nextUrl.searchParams.get("role") as UserRole | null;
-  const role = requestedRole && selectableRoles.includes(requestedRole) ? requestedRole : "patient";
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json().catch(() => null);
+    const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
+    const password = typeof body?.password === "string" ? body.password : "";
 
-  const session = await createSession({
-    sub: `demo-${role}`,
-    email: `${role}@medisync.demo`,
-    name:
-      role === "patient"
-        ? "Demo Patient"
-        : role === "hospital"
-          ? "Demo Hospital"
-          : role === "insurance_agent"
-            ? "Demo Insurance Agent"
-            : role === "specialist"
-              ? "Demo Specialist"
-              : "Demo Admin",
-    role,
-    patientId: role === "patient" ? "P1001" : undefined,
-    hospitalId: role === "hospital" ? "HOSP-001" : undefined,
-    insuranceAgentId: role === "insurance_agent" ? "INS-001" : undefined,
-  });
+    if (!email || !password) return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
 
-  const response = NextResponse.redirect(new URL(dashboardForRole(role), req.url));
-  response.cookies.set(SESSION_COOKIE, session, sessionCookieOptions());
-  return response;
+    const { data: user, error } = await getDb()
+      .from("users")
+      .select("id,email,password_hash,name,role,organization_id,status,created_at,updated_at")
+      .eq("email", email)
+      .maybeSingle<DbUser>();
+
+    if (error) throw error;
+
+    const passwordValid = user ? await bcrypt.compare(password, user.password_hash) : false;
+    if (!user || !passwordValid || user.status !== "ACTIVE") {
+      return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
+    }
+
+    const role = roleMap[user.role];
+    const session = await createSession({
+      sub: user.id,
+      email: user.email,
+      name: user.name,
+      role,
+      patientId: role === "patient" ? user.id : undefined,
+      hospitalId: role === "hospital" ? user.organization_id ?? undefined : undefined,
+      insuranceAgentId: role === "insurance_agent" ? user.organization_id ?? undefined : undefined,
+      organizationId: user.organization_id ?? undefined,
+    });
+
+    const response = NextResponse.json({
+      authenticated: true,
+      user: { id: user.id, email: user.email, name: user.name, role },
+      redirectTo: dashboardForRole(role),
+    });
+    response.cookies.set(SESSION_COOKIE, session, sessionCookieOptions());
+    return response;
+  } catch {
+    return NextResponse.json({ error: "Authentication service unavailable" }, { status: 503 });
+  }
 }
