@@ -17,6 +17,8 @@ type Session = {
   exp: number;
 };
 
+type OAuthState = { nonce: string; role: UserRole; exp: number };
+
 function required(name: string) {
   const value = process.env[name];
   if (!value) throw new Error(`Missing environment variable: ${name}`);
@@ -88,6 +90,30 @@ export function cognitoConfig() {
     issuer: domain,
     callbackUrl: `${appUrl}/api/auth/callback`,
   };
+}
+
+export async function createOAuthState(role: UserRole) {
+  const nonce = randomState();
+  const payload: OAuthState = { nonce, role, exp: Math.floor(Date.now() / 1000) + 10 * 60 };
+  const encoded = toBase64Url(new TextEncoder().encode(JSON.stringify(payload)));
+  const signature = await crypto.subtle.sign("HMAC", await hmac(encoded), new TextEncoder().encode(encoded));
+  return `${encoded}.${toBase64Url(new Uint8Array(signature))}`;
+}
+
+export async function verifyOAuthState(value: string | undefined): Promise<OAuthState | null> {
+  if (!value) return null;
+  const [encoded, signature] = value.split(".");
+  if (!encoded || !signature) return null;
+  try {
+    const valid = await crypto.subtle.verify("HMAC", await hmac(encoded), fromBase64Url(signature), new TextEncoder().encode(encoded));
+    if (!valid) return null;
+    const payload = JSON.parse(new TextDecoder().decode(fromBase64Url(encoded))) as OAuthState;
+    if (!payload.nonce || !payload.exp || payload.exp <= Math.floor(Date.now() / 1000)) return null;
+    if (!["patient", "hospital", "insurance_agent", "specialist", "admin"].includes(payload.role)) return null;
+    return payload;
+  } catch {
+    return null;
+  }
 }
 
 export function randomState() {
