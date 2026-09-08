@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { base64UrlJson, cognitoConfig, createSession, ROLE_HINT_COOKIE, SESSION_COOKIE, STATE_COOKIE, UserRole } from "@/lib/auth";
+import { base64UrlJson, cognitoConfig, createSession, ROLE_HINT_COOKIE, SESSION_COOKIE, STATE_COOKIE, UserRole, verifyOAuthState } from "@/lib/auth";
 
 type JwtHeader = { kid: string; alg: string };
 type JwtClaims = {
@@ -90,10 +90,12 @@ export async function GET(req: NextRequest) {
     const config = cognitoConfig();
     const code = req.nextUrl.searchParams.get("code");
     const state = req.nextUrl.searchParams.get("state");
-    const expectedState = req.cookies.get(STATE_COOKIE)?.value;
-    const requestedRole = req.cookies.get(ROLE_HINT_COOKIE)?.value as UserRole | undefined;
-    if (!code || !state || !expectedState || state !== expectedState) {
-      return NextResponse.redirect(new URL("/login?error=oauth_state", config.appUrl));
+    const statePayload = await verifyOAuthState(state ?? undefined);
+    if (!code || !statePayload) {
+      const response = NextResponse.redirect(new URL("/login?error=oauth_state", config.appUrl));
+      response.cookies.delete(STATE_COOKIE);
+      response.cookies.delete(ROLE_HINT_COOKIE);
+      return response;
     }
 
     const basicCredentials = btoa(`${config.clientId}:${config.clientSecret}`);
@@ -125,8 +127,8 @@ export async function GET(req: NextRequest) {
 
     // The role picker is only an onboarding/routing hint. The verified
     // Cognito role remains authoritative for authorization.
-    if (requestedRole && requestedRole !== role) {
-      const response = NextResponse.redirect(new URL(`/login?error=role_mismatch&selected=${requestedRole}&actual=${role}`, config.appUrl));
+    if (statePayload.role !== role) {
+      const response = NextResponse.redirect(new URL(`/login?error=role_mismatch&selected=${statePayload.role}&actual=${role}`, config.appUrl));
       response.cookies.delete(ROLE_HINT_COOKIE);
       response.cookies.delete(STATE_COOKIE);
       return response;
