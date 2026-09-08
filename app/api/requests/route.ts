@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/auth";
-import { appendAudit } from "@/lib/repositories/audit";
 import { createRequest, listRequestsForPatient } from "@/lib/repositories/requests";
 
 const WORKBENCH_WEBHOOK_URL = process.env.SNS_WORKBENCH_WEBHOOK_URL;
@@ -57,18 +56,15 @@ export async function POST(req: NextRequest) {
   let record: Awaited<ReturnType<typeof createRequest>>;
   try {
     record = await createRequest(session, { request: body.request, document_uploaded: Boolean(body.document_uploaded) });
-    await appendAudit({ actorUserId: session.sub, actorRole: session.role, action: "REQUEST_CREATED", entityType: "request", entityId: record.db_id, requestId: record.db_id, metadata: { request_id: record.request_id, request_source: record.request_source } });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error && error.message === "FORBIDDEN" ? "Forbidden" : "Unable to create request" }, { status: statusFor(error) });
   }
 
   try {
     const workflow = await triggerWorkflow(record);
-    await appendAudit({ actorUserId: session.sub, actorRole: session.role, action: workflow.triggered ? "WORKFLOW_TRIGGERED" : "WORKFLOW_NOT_CONFIGURED", entityType: "request", entityId: record.db_id, requestId: record.db_id, metadata: { request_id: record.request_id, detail: workflow.triggered ? "Sent to SNS Workbench for processing" : workflow.reason } });
     const { db_id: _dbId, ...publicRecord } = record;
     return NextResponse.json({ request: publicRecord, workflow }, { status: 201 });
   } catch (error) {
-    await appendAudit({ actorUserId: session.sub, actorRole: session.role, action: "WORKFLOW_TRIGGER_FAILED", entityType: "request", entityId: record.db_id, requestId: record.db_id, metadata: { request_id: record.request_id, error: error instanceof Error ? error.message : "Unknown workflow trigger error" } });
     return NextResponse.json({ error: "Request created, but the workflow could not be triggered", request_id: record.request_id }, { status: 502 });
   }
 }
