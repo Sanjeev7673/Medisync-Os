@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { base64UrlJson, cognitoConfig, createSession, SESSION_COOKIE, STATE_COOKIE } from "@/lib/auth";
+import { base64UrlJson, cognitoConfig, createSession, ROLE_HINT_COOKIE, SESSION_COOKIE, STATE_COOKIE, UserRole } from "@/lib/auth";
 
 type JwtHeader = { kid: string; alg: string };
 type JwtClaims = {
@@ -23,16 +23,11 @@ function base64UrlToBytes(value: string) {
 async function verifyCognitoIdToken(token: string, config: ReturnType<typeof cognitoConfig>) {
   const parts = token.split(".");
   if (parts.length !== 3) throw new Error("Invalid Cognito ID token");
-
   const header = base64UrlJson(parts[0]) as unknown as JwtHeader;
   const claims = base64UrlJson(parts[1]) as unknown as JwtClaims;
   if (!header.kid || header.alg !== "RS256") throw new Error("Unsupported Cognito token signing algorithm");
   if (!claims.iss) throw new Error("Cognito ID token is missing issuer");
 
-  // Cognito's managed-login domain is different from the user-pool issuer
-  // domain that hosts the OIDC signing keys. The ID token contains the issuer;
-  // constrain it to the Cognito issuer hosts for the configured region before
-  // using it to locate the JWKS.
   const allowedIssuerPrefixes = [
     "https://cognito-idp.ap-south-1.amazonaws.com/",
     "https://issuer-cognito-idp.ap-south-1.amazonaws.com/",
@@ -61,7 +56,6 @@ async function verifyCognitoIdToken(token: string, config: ReturnType<typeof cog
     base64UrlToBytes(parts[2]),
     new TextEncoder().encode(`${parts[0]}.${parts[1]}`),
   );
-
   const now = Math.floor(Date.now() / 1000);
   if (!valid || claims.token_use !== "id" || claims.aud !== config.clientId || !claims.exp || claims.exp <= now) {
     throw new Error("Invalid Cognito ID token claims");
@@ -69,14 +63,23 @@ async function verifyCognitoIdToken(token: string, config: ReturnType<typeof cog
   return claims;
 }
 
-function roleFromClaims(claims: JwtClaims): "patient" | "specialist" | "admin" | "hospital" {
+function roleFromClaims(claims: JwtClaims): UserRole {
   const role = claims["custom:role"];
-  if (role === "specialist" || role === "admin" || role === "hospital") return role;
+  if (role === "patient" || role === "hospital" || role === "insurance_agent" || role === "specialist" || role === "admin") return role;
   const groups = claims["cognito:groups"] ?? [];
   if (groups.includes("admin")) return "admin";
   if (groups.includes("specialist")) return "specialist";
   if (groups.includes("hospital")) return "hospital";
+  if (groups.includes("insurance_agent")) return "insurance_agent";
   return "patient";
+}
+
+function dashboardForRole(role: UserRole) {
+  if (role === "hospital") return "/hospital/dashboard";
+  if (role === "insurance_agent") return "/insurance/dashboard";
+  if (role === "specialist") return "/specialist/dashboard";
+  if (role === "admin") return "/admin/dashboard";
+  return "/patient/dashboard";
 }
 
 export async function GET(req: NextRequest) {
@@ -85,11 +88,11 @@ export async function GET(req: NextRequest) {
     const code = req.nextUrl.searchParams.get("code");
     const state = req.nextUrl.searchParams.get("state");
     const expectedState = req.cookies.get(STATE_COOKIE)?.value;
+    const requestedRole = req.cookies.get(ROLE_HINT_COOKIE)?.value as UserRole | undefined;
     if (!code || !state || !expectedState || state !== expectedState) {
       return NextResponse.redirect(new URL("/login?error=oauth_state", config.appUrl));
     }
 
-    // Amazon Cognito supports client_secret_basic for confidential app clients.
     const basicCredentials = btoa(`${config.clientId}:${config.clientSecret}`);
     const body = new URLSearchParams({
       grant_type: "authorization_code",
@@ -115,14 +118,22 @@ export async function GET(req: NextRequest) {
     const tokens = (await tokenResponse.json()) as { id_token?: string };
     if (!tokens.id_token) throw new Error("Cognito did not return an ID token");
     const claims = await verifyCognitoIdToken(tokens.id_token, config);
+    const role = roleFromClaims(claims);
+
+    // The role picker is a routing hint, not an authorization mechanism. The
+    // signed Cognito claim remains the source of truth for elevated roles.
+    if (requestedRole && requestedRole !== role) {
+      return NextResponse.redirect(new URL(`/login?error=role_mismatch&selected=${requestedRole}&actual=${role}`, config.appUrl));
+    }
+
     const session = await createSession({
       sub: claims.sub,
       email: claims.email,
-      role: roleFromClaims(claims),
+      role,
       patientId: claims["custom:patient_id"],
     });
 
-    const response = NextResponse.redirect(new URL("/dashboard", config.appUrl));
+    const response = NextResponse.redirect(new URL(dashboardForRole(role), config.appUrl));
     response.cookies.set(SESSION_COOKIE, session, {
       httpOnly: true,
       secure: true,
@@ -131,6 +142,7 @@ export async function GET(req: NextRequest) {
       maxAge: 60 * 60 * 8,
     });
     response.cookies.delete(STATE_COOKIE);
+    response.cookies.delete(ROLE_HINT_COOKIE);
     return response;
   } catch (error) {
     console.error("Cognito callback failed", error);
