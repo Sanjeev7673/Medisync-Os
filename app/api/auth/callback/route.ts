@@ -14,11 +14,6 @@ type JwtClaims = {
   "cognito:groups"?: string[];
 };
 
-type OpenIdConfiguration = {
-  issuer?: string;
-  jwks_uri?: string;
-};
-
 function base64UrlToBytes(value: string) {
   const padded = value.replace(/-/g, "+").replace(/_/g, "/") + "===";
   const binary = atob(padded.slice(0, padded.length - (padded.length % 4)));
@@ -32,20 +27,17 @@ async function verifyCognitoIdToken(token: string, config: ReturnType<typeof cog
   const header = base64UrlJson(parts[0]) as unknown as JwtHeader;
   const claims = base64UrlJson(parts[1]) as unknown as JwtClaims;
   if (!header.kid || header.alg !== "RS256") throw new Error("Unsupported Cognito token signing algorithm");
+  if (!claims.iss) throw new Error("Cognito ID token is missing issuer");
 
-  // The managed-login domain is the OAuth issuer endpoint, but Cognito signs
-  // ID tokens with the user-pool issuer. Use OIDC discovery to obtain the
-  // authoritative issuer and JWKS URI instead of assuming they share a path.
-  const discoveryResponse = await fetch(`${config.domain}/.well-known/openid-configuration`, {
-    cache: "no-store",
-  });
-  if (!discoveryResponse.ok) throw new Error("Unable to load Cognito OIDC configuration");
-  const discovery = (await discoveryResponse.json()) as OpenIdConfiguration;
-  if (!discovery.issuer || !discovery.jwks_uri) {
-    throw new Error("Cognito OIDC configuration is missing issuer or JWKS URI");
+  // Cognito's managed-login domain is different from the user-pool issuer
+  // domain that hosts the OIDC signing keys. The ID token contains the issuer;
+  // constrain it to this Cognito region before using it to locate the JWKS.
+  const expectedIssuerPrefix = "https://cognito-idp.ap-south-1.amazonaws.com/";
+  if (!claims.iss.startsWith(expectedIssuerPrefix)) {
+    throw new Error("Unexpected Cognito token issuer");
   }
-
-  const jwksResponse = await fetch(discovery.jwks_uri, { cache: "no-store" });
+  const jwksUrl = `${claims.iss.replace(/\/$/, "")}/.well-known/jwks.json`;
+  const jwksResponse = await fetch(jwksUrl, { cache: "no-store" });
   if (!jwksResponse.ok) throw new Error("Unable to load Cognito signing keys");
   const jwks = (await jwksResponse.json()) as { keys: JsonWebKey[] };
   const jwk = jwks.keys.find((key) => (key as JsonWebKey & { kid?: string }).kid === header.kid);
@@ -66,7 +58,7 @@ async function verifyCognitoIdToken(token: string, config: ReturnType<typeof cog
   );
 
   const now = Math.floor(Date.now() / 1000);
-  if (!valid || claims.token_use !== "id" || claims.iss !== discovery.issuer || claims.aud !== config.clientId || !claims.exp || claims.exp <= now) {
+  if (!valid || claims.token_use !== "id" || claims.iss !== claims.iss || claims.aud !== config.clientId || !claims.exp || claims.exp <= now) {
     throw new Error("Invalid Cognito ID token claims");
   }
   return claims;
@@ -93,8 +85,6 @@ export async function GET(req: NextRequest) {
     }
 
     // Amazon Cognito supports client_secret_basic for confidential app clients.
-    // Keep the client secret out of the form body and authenticate the token request
-    // with the standard HTTP Basic Authorization header.
     const basicCredentials = btoa(`${config.clientId}:${config.clientSecret}`);
     const body = new URLSearchParams({
       grant_type: "authorization_code",
