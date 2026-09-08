@@ -1,13 +1,22 @@
 import { NextResponse } from "next/server";
-import { cognitoConfig, SESSION_COOKIE } from "@/lib/auth";
+import { SESSION_COOKIE } from "@/lib/auth";
 
-export async function GET() {
-  const config = cognitoConfig();
-  const url = new URL(`${config.domain}/logout`);
-  url.searchParams.set("client_id", config.clientId);
-  url.searchParams.set("logout_uri", `${config.appUrl}/login`);
+export async function GET(req: Request) {
+  const response = NextResponse.redirect(
+    new URL("/login", req.url),
+  );
 
-  const response = NextResponse.redirect(url);
-  response.cookies.delete(SESSION_COOKIE);
+  response.cookies.set(
+    SESSION_COOKIE,
+    "",
+    {
+      httpOnly: true,
+      secure: true,
+      sameSite: "lax",
+      path: "/",
+      maxAge: 0,
+    },
+  );
+
   return response;
 }
