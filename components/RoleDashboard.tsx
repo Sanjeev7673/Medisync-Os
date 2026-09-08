@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import RoleShell from "@/components/RoleShell";
 import StatusBadge from "@/components/StatusBadge";
 import { PatientRequest } from "@/lib/types";
 
 type Role = "patient" | "hospital" | "insurance_agent";
-type SessionUser = { email?: string; patientId?: string; role: Role };
+type SessionUser = { email?: string; name?: string; patientId?: string; hospitalId?: string; insuranceAgentId?: string; role: Role | "specialist" | "admin" };
 
 const config = {
   patient: {
@@ -21,30 +22,56 @@ const config = {
   },
 } as const;
 
+function dashboardForRole(role: SessionUser["role"]) {
+  if (role === "hospital") return "/hospital/dashboard";
+  if (role === "insurance_agent") return "/insurance/dashboard";
+  if (role === "specialist") return "/specialist/dashboard";
+  if (role === "admin") return "/admin/dashboard";
+  return "/patient/dashboard";
+}
+
 export default function RoleDashboard({ role }: { role: Role }) {
+  const router = useRouter();
   const [user, setUser] = useState<SessionUser | null>(null);
   const [requests, setRequests] = useState<PatientRequest[]>([]);
   const [apiState, setApiState] = useState<"loading" | "ready" | "error">("loading");
   const c = config[role];
 
   useEffect(() => {
-    fetch("/api/auth/session").then((r) => r.json()).then(async (data) => {
-      const session = data?.user as SessionUser | undefined;
-      if (!session || session.role !== role) return;
-      setUser(session);
-      if (role === "patient" && session.patientId) {
-        const response = await fetch(`/api/requests?patient_id=${encodeURIComponent(session.patientId)}`);
-        if (!response.ok) throw new Error("request api");
-        const body = await response.json();
-        setRequests(body.requests ?? []);
-      }
-      setApiState("ready");
-    }).catch(() => setApiState("error"));
-  }, [role]);
+    let cancelled = false;
+    fetch("/api/auth/session")
+      .then(async (response) => {
+        if (!response.ok) throw new Error("session");
+        return response.json();
+      })
+      .then(async (data) => {
+        const session = data?.user as SessionUser | undefined;
+        if (!session) throw new Error("session");
+        if (session.role !== role) {
+          router.replace(dashboardForRole(session.role));
+          return;
+        }
+        if (cancelled) return;
+        setUser(session);
+
+        if (role === "patient" && session.patientId) {
+          const response = await fetch(`/api/requests?patient_id=${encodeURIComponent(session.patientId)}`);
+          if (!response.ok) throw new Error("request api");
+          const body = await response.json();
+          if (!cancelled) setRequests(body.requests ?? []);
+        }
+        if (!cancelled) setApiState("ready");
+      })
+      .catch(() => {
+        if (!cancelled) setApiState("error");
+      });
+    return () => { cancelled = true; };
+  }, [role, router]);
 
   const patientActive = requests.filter((item) => !["COMPLETED", "CANCELLED"].includes(item.workflow_status)).length;
   const patientCompleted = requests.filter((item) => item.workflow_status === "COMPLETED").length;
   const metricValues = useMemo(() => role === "patient" ? [patientActive, patientCompleted, "—", "—"] : ["—", "—", "—", "—"], [patientActive, patientCompleted, role]);
+  const profileId = role === "patient" ? user?.patientId : role === "hospital" ? user?.hospitalId : user?.insuranceAgentId;
 
   return (
     <RoleShell role={role}>
@@ -56,9 +83,9 @@ export default function RoleDashboard({ role }: { role: Role }) {
       <section className="reveal reveal-delay-1 mt-8 grid gap-4 lg:grid-cols-[1.45fr_.55fr]">
         <div className="relative overflow-hidden rounded-[30px] bg-[var(--ink)] p-6 text-white shadow-[var(--shadow-md)] md:p-8">
           <div className="mesh-orb absolute -right-16 -top-20 h-64 w-64 rounded-full bg-[#B9C5EC]/20 blur-3xl" />
-          <div className="relative"><div className="flex items-center justify-between"><span className="rounded-full bg-white/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[.16em] text-white/75">Live workflow</span><span className="text-xs text-white/50">{user?.email ?? "Secure session"}</span></div><h2 className="mt-12 max-w-xl font-display text-3xl font-extrabold leading-tight tracking-[-.03em]">Every handoff has a visible next step.</h2><div className="mt-8 grid gap-2 sm:grid-cols-5">{c.pipeline.map((step, index) => <div key={step} className="rounded-2xl border border-white/10 bg-white/[.06] p-3"><span className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${index === 0 ? "bg-[#B9C5EC] text-[var(--ink)]" : "bg-white/10 text-white/65"}`}>{index + 1}</span><p className="mt-3 text-[11px] font-semibold leading-4 text-white/70">{step}</p></div>)}</div></div>
+          <div className="relative"><div className="flex flex-wrap items-center justify-between gap-3"><span className="rounded-full bg-white/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[.16em] text-white/75">Live workflow</span><span className="text-xs text-white/50">{profileId ?? user?.email ?? "Secure session"}</span></div><h2 className="mt-12 max-w-xl font-display text-3xl font-extrabold leading-tight tracking-[-.03em]">Every handoff has a visible next step.</h2><div className="mt-8 grid gap-2 sm:grid-cols-5">{c.pipeline.map((step, index) => <div key={step} className="rounded-2xl border border-white/10 bg-white/[.06] p-3"><span className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${index === 0 ? "bg-[#B9C5EC] text-[var(--ink)]" : "bg-white/10 text-white/65"}`}>{index + 1}</span><p className="mt-3 text-[11px] font-semibold leading-4 text-white/70">{step}</p></div>)}</div></div>
         </div>
-        <div className="glass rounded-[30px] p-6 md:p-7"><p className="text-xs font-bold uppercase tracking-[.16em] text-[var(--muted)]">Workspace health</p><div className="mt-7 flex items-center gap-3"><span className={`h-3 w-3 rounded-full ${apiState === "error" ? "bg-[var(--danger)]" : "bg-[var(--success)]"}`} /><p className="text-sm font-bold">{apiState === "error" ? "Data service needs attention" : apiState === "loading" ? "Connecting securely…" : "Session connected"}</p></div><p className="mt-3 text-xs leading-5 text-[var(--muted)]">Your role controls which workflow data and actions are available in this workspace.</p></div>
+        <div className="glass rounded-[30px] p-6 md:p-7"><p className="text-xs font-bold uppercase tracking-[.16em] text-[var(--muted)]">Workspace health</p><div className="mt-7 flex items-center gap-3"><span className={`h-3 w-3 rounded-full ${apiState === "error" ? "bg-[var(--danger)]" : "bg-[var(--success)]"}`} /><p className="text-sm font-bold">{apiState === "error" ? "Data service needs attention" : apiState === "loading" ? "Connecting securely…" : "Session connected"}</p></div><p className="mt-3 text-xs leading-5 text-[var(--muted)]">Your verified role controls which workflow data and actions are available in this workspace.</p></div>
       </section>
 
       <section className="reveal reveal-delay-2 mt-8 grid grid-cols-2 gap-3 lg:grid-cols-4">{c.metrics.map((label, index) => <div key={label} className="glass rounded-2xl p-5"><p className="font-display text-3xl font-extrabold">{metricValues[index]}</p><p className="mt-1 text-xs font-semibold text-[var(--muted)]">{label}</p></div>)}</section>
