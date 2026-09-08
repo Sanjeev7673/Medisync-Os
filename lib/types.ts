@@ -8,7 +8,7 @@ export interface HospitalRecommendation { hospital_id: string; hospital_name: st
 
 export interface PatientRequest {
   request_id: string; patient_id: string; request: string; request_source: "patient_portal" | "specialist_portal" | "api"; document_uploaded: boolean;
-  request_type: RequestType | null; specialty: string | null; specialist_review_required: boolean | null; document_required: boolean | null; classification_reason: string | null;
+  request_type: RequestType | null; specialty: string | null; specialist_review_required: boolean | null; document_required: boolean | null; classification_reason: string | null; ai_confidence: number | null;
   specialist_review: { status: "PENDING" | "APPROVED" | "REJECTED" | "MORE_INFORMATION_REQUIRED" | null; reviewed_by: string | null; reviewed_at: string | null; notes: string | null; };
   hospital_matching: { status: "PENDING" | "IN_PROGRESS" | "COMPLETED" | "NO_MATCH" | null; recommendations: HospitalRecommendation[]; };
   referral: { status: "PENDING" | "CREATED" | "SENT" | "ACCEPTED" | "REJECTED" | null; referral_id: string | null; hospital_id: string | null; };
@@ -20,6 +20,6 @@ export interface AuditEvent { audit_id: string; request_id: string; event_type: 
 
 export interface RequestStatusResponse {
   request_id: string; patient_id: string; request: string; request_type: RequestType | null; specialty: string | null;
-  classification_reason: string | null; specialist_review_required: boolean | null; document_required: boolean | null;
+  classification_reason: string | null; specialist_review_required: boolean | null; document_required: boolean | null; ai_confidence: number | null;
   specialist_review: PatientRequest["specialist_review"]; hospital_matching: PatientRequest["hospital_matching"]; referral: PatientRequest["referral"]; appointment: PatientRequest["appointment"]; workflow_status: WorkflowStatus;
 }
