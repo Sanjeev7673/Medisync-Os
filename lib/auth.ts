@@ -2,11 +2,14 @@ import { NextRequest } from "next/server";
 
 export const SESSION_COOKIE = "medisync_session";
 export const STATE_COOKIE = "medisync_oauth_state";
+export const ROLE_HINT_COOKIE = "medisync_role_hint";
+
+export type UserRole = "patient" | "hospital" | "insurance_agent" | "specialist" | "admin";
 
 type Session = {
   sub: string;
   email?: string;
-  role: "patient" | "specialist" | "admin" | "hospital";
+  role: UserRole;
   patientId?: string;
   exp: number;
 };
