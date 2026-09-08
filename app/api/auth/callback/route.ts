@@ -75,21 +75,28 @@ export async function GET(req: NextRequest) {
       return NextResponse.redirect(new URL("/login?error=oauth_state", config.appUrl));
     }
 
+    // Amazon Cognito supports client_secret_basic for confidential app clients.
+    // Keep the client secret out of the form body and authenticate the token request
+    // with the standard HTTP Basic Authorization header.
+    const basicCredentials = btoa(`${config.clientId}:${config.clientSecret}`);
     const body = new URLSearchParams({
       grant_type: "authorization_code",
       client_id: config.clientId,
-      client_secret: config.clientSecret,
       code,
       redirect_uri: config.callbackUrl,
     });
     const tokenResponse = await fetch(`${config.domain}/oauth2/token`, {
       method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Authorization: `Basic ${basicCredentials}`,
+      },
       body,
       cache: "no-store",
     });
     if (!tokenResponse.ok) {
-      console.error("Cognito token exchange failed", await tokenResponse.text());
+      const tokenError = await tokenResponse.text();
+      console.error("Cognito token exchange failed", tokenError);
       return NextResponse.redirect(new URL("/login?error=oauth_token", config.appUrl));
     }
 
