@@ -12,14 +12,10 @@ type RequestRow = {
 };
 
 const transitions: Record<RequestStage, RequestStage[]> = {
-  CREATED: ["CLASSIFIED", "CANCELLED"],
-  CLASSIFIED: ["SPECIALIST_REVIEW", "HOSPITAL_MATCHING", "REJECTED", "CANCELLED"],
-  SPECIALIST_REVIEW: ["HOSPITAL_MATCHING", "REJECTED", "CANCELLED"],
-  HOSPITAL_MATCHING: ["REFERRAL", "REJECTED", "CANCELLED"],
-  REFERRAL: ["APPOINTMENT_PENDING", "REJECTED", "CANCELLED"],
-  APPOINTMENT_PENDING: ["SCHEDULED", "CANCELLED"],
-  SCHEDULED: ["COMPLETED", "CANCELLED"],
-  COMPLETED: [], REJECTED: [], CANCELLED: [],
+  CREATED: ["CLASSIFIED", "CANCELLED"], CLASSIFIED: ["SPECIALIST_REVIEW", "HOSPITAL_MATCHING", "REJECTED", "CANCELLED"],
+  SPECIALIST_REVIEW: ["HOSPITAL_MATCHING", "REJECTED", "CANCELLED"], HOSPITAL_MATCHING: ["REFERRAL", "REJECTED", "CANCELLED"],
+  REFERRAL: ["APPOINTMENT_PENDING", "REJECTED", "CANCELLED"], APPOINTMENT_PENDING: ["SCHEDULED", "CANCELLED"],
+  SCHEDULED: ["COMPLETED", "CANCELLED"], COMPLETED: [], REJECTED: [], CANCELLED: [],
 };
 
 function assertPatientOwner(session: Session, patientId: string) {
@@ -32,6 +28,14 @@ async function getRequestRow(requestId: string) {
   return data;
 }
 
+async function assertHospitalTenant(session: Session, requestId: string) {
+  if (session.role !== "hospital" || !session.organizationId) throw new Error("FORBIDDEN");
+  const { data, error } = await getDb().from("referrals").select("hospital_id, hospitals!inner(id, organization_id)").eq("request_id", requestId).returns<{ hospital_id: string; hospitals: { id: string; organization_id: string | null } }[]>();
+  if (error) throw error;
+  const allowed = data.some((x) => x.hospitals.organization_id === session.organizationId && (!session.hospitalId || session.hospitalId === x.hospital_id));
+  if (!allowed) throw new Error("FORBIDDEN");
+}
+
 async function assertWorkflowActor(session: Session, row: RequestRow, nextStage: RequestStage) {
   if (session.role === "admin") return;
   if (session.role === "patient") throw new Error("FORBIDDEN");
@@ -42,13 +46,7 @@ async function assertWorkflowActor(session: Session, row: RequestRow, nextStage:
   }
   if (session.role === "hospital") {
     if (!["HOSPITAL_MATCHING", "REFERRAL", "APPOINTMENT_PENDING", "SCHEDULED", "REJECTED", "CANCELLED"].includes(nextStage)) throw new Error("FORBIDDEN");
-    const { data: hospital, error } = await getDb().from("hospitals").select("id, organization_id").eq("id", row.assigned_specialist_id ?? "").maybeSingle();
-    if (error) throw error;
-    void hospital;
-    if (!session.organizationId) throw new Error("FORBIDDEN");
-    const { data: referralHospital, error: hospitalError } = await getDb().from("referrals").select("hospital_id, hospitals!inner(organization_id)").eq("request_id", row.id).maybeSingle<{ hospital_id: string; hospitals: { organization_id: string | null } }>();
-    if (hospitalError) throw hospitalError;
-    if (!referralHospital || referralHospital.hospitals.organization_id !== session.organizationId) throw new Error("FORBIDDEN");
+    await assertHospitalTenant(session, row.id);
     return;
   }
   throw new Error("FORBIDDEN");
@@ -100,6 +98,7 @@ export async function assignSpecialist(session: Session, requestId: string, spec
   if (!["admin", "hospital"].includes(session.role)) throw new Error("FORBIDDEN");
   const current = await getRequestRow(requestId);
   if (!current) throw new Error("NOT_FOUND");
+  if (session.role === "hospital") await assertHospitalTenant(session, current.id);
   const { data: specialist, error: specialistError } = await getDb().from("specialists").select("id, credential_status, review_queue_status").eq("id", specialistId).maybeSingle<{ id: string; credential_status: string; review_queue_status: string }>();
   if (specialistError) throw specialistError;
   if (!specialist || specialist.credential_status !== "VERIFIED" || specialist.review_queue_status === "INACTIVE") throw new Error("INVALID_SPECIALIST");
