@@ -9,8 +9,11 @@ export type UserRole = "patient" | "hospital" | "insurance_agent" | "specialist"
 type Session = {
   sub: string;
   email?: string;
+  name?: string;
   role: UserRole;
   patientId?: string;
+  hospitalId?: string;
+  insuranceAgentId?: string;
   exp: number;
 };
 
