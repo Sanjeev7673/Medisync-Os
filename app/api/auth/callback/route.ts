@@ -5,11 +5,14 @@ type JwtHeader = { kid: string; alg: string };
 type JwtClaims = {
   sub: string;
   email?: string;
+  name?: string;
   token_use?: string;
   iss?: string;
   aud?: string;
   exp?: number;
   "custom:patient_id"?: string;
+  "custom:hospital_id"?: string;
+  "custom:insurance_agent_id"?: string;
   "custom:role"?: string;
   "cognito:groups"?: string[];
 };
@@ -65,12 +68,12 @@ async function verifyCognitoIdToken(token: string, config: ReturnType<typeof cog
 
 function roleFromClaims(claims: JwtClaims): UserRole {
   const role = claims["custom:role"];
-  if (role === "patient" || role === "hospital" || role === "insurance_agent" || role === "specialist" || role === "admin") return role;
+  if (["patient", "hospital", "insurance_agent", "specialist", "admin"].includes(role ?? "")) return role as UserRole;
   const groups = claims["cognito:groups"] ?? [];
   if (groups.includes("admin")) return "admin";
   if (groups.includes("specialist")) return "specialist";
-  if (groups.includes("hospital")) return "hospital";
   if (groups.includes("insurance_agent")) return "insurance_agent";
+  if (groups.includes("hospital")) return "hospital";
   return "patient";
 }
 
@@ -120,17 +123,23 @@ export async function GET(req: NextRequest) {
     const claims = await verifyCognitoIdToken(tokens.id_token, config);
     const role = roleFromClaims(claims);
 
-    // The role picker is a routing hint, not an authorization mechanism. The
-    // signed Cognito claim remains the source of truth for elevated roles.
+    // The role picker is only an onboarding/routing hint. The verified
+    // Cognito role remains authoritative for authorization.
     if (requestedRole && requestedRole !== role) {
-      return NextResponse.redirect(new URL(`/login?error=role_mismatch&selected=${requestedRole}&actual=${role}`, config.appUrl));
+      const response = NextResponse.redirect(new URL(`/login?error=role_mismatch&selected=${requestedRole}&actual=${role}`, config.appUrl));
+      response.cookies.delete(ROLE_HINT_COOKIE);
+      response.cookies.delete(STATE_COOKIE);
+      return response;
     }
 
     const session = await createSession({
       sub: claims.sub,
       email: claims.email,
+      name: claims.name,
       role,
       patientId: claims["custom:patient_id"],
+      hospitalId: claims["custom:hospital_id"],
+      insuranceAgentId: claims["custom:insurance_agent_id"],
     });
 
     const response = NextResponse.redirect(new URL(dashboardForRole(role), config.appUrl));
