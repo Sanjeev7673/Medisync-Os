@@ -11,7 +11,18 @@ const transitions: Record<Referral["status"], Referral["status"][]> = { CREATED:
 async function assertHospitalTenant(session: Session, hospitalId: string) { if (session.role !== "hospital" || !session.organizationId) throw new Error("FORBIDDEN"); const { data, error } = await getDb().from("hospitals").select("id, organization_id").eq("id", hospitalId).maybeSingle<{ id: string; organization_id: string | null }>(); if (error) throw error; if (!data || data.organization_id !== session.organizationId || (session.hospitalId && session.hospitalId !== data.id)) throw new Error("FORBIDDEN"); }
 async function assertPatientAccess(session: Session, requestId: string) { if (session.role !== "patient" || session.sub !== session.patientId) throw new Error("FORBIDDEN"); const { data, error } = await getDb().from("requests").select("id").eq("id", requestId).eq("patient_id", session.patientId).maybeSingle<{ id: string }>(); if (error) throw error; if (!data) throw new Error("FORBIDDEN"); }
 async function getReferralRow(referralId: string) { const { data, error } = await getDb().from("referrals").select("*").eq("referral_id", referralId).maybeSingle<Referral>(); if (error) throw error; return data; }
-async function assertReferralAccess(session: Session, referral: Referral) { if (session.role === "admin") return; if (session.role === "patient") return assertPatientAccess(session, referral.request_id); if (session.role === "hospital") return assertHospitalTenant(session, referral.hospital_id); if (session.role === "specialist") { if (referral.specialist_id !== session.sub) throw new Error("FORBIDDEN"); return; } throw new Error("FORBIDDEN"); }
+async function assertReferralAccess(session: Session, referral: Referral) {
+  if (session.role === "admin") return;
+  if (session.role === "patient") return assertPatientAccess(session, referral.request_id);
+  if (session.role === "hospital") return assertHospitalTenant(session, referral.hospital_id);
+  if (session.role === "specialist") {
+    const { data, error } = await getDb().from("specialists").select("id").eq("user_id", session.sub).maybeSingle<{ id: string }>();
+    if (error) throw error;
+    if (!data || referral.specialist_id !== data.id) throw new Error("FORBIDDEN");
+    return;
+  }
+  throw new Error("FORBIDDEN");
+}
 
 export async function createReferral(session: Session, input: { requestId: string; hospitalId: string; specialistId?: string; clinicalSummary?: string; reason?: string }) {
   if (!["admin", "hospital"].includes(session.role)) throw new Error("FORBIDDEN"); if (session.role === "hospital") await assertHospitalTenant(session, input.hospitalId);
