@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useParams, useEffect, useState } from "next/navigation";
+import { useParams } from "next/navigation";
+import { useEffect, useState } from "react";
 import type { PatientRequest } from "@/lib/types";
 
 type AuditEntry = { action: string; created_at: string; actor_user_id?: string | null };
