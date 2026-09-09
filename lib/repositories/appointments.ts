@@ -21,12 +21,12 @@ async function assertPatientAppointment(session: Session, id: string) {
 
 export async function listAvailableAppointments(session: Session, input: { hospitalId?: string; specialistId?: string; from?: string; to?: string }) {
   if (!["patient", "admin", "hospital", "specialist"].includes(session.role)) throw new Error("FORBIDDEN");
-  let query = getDb().from("appointments").select("*").eq("status", "AVAILABLE").order("starts_at").returns<Appointment[]>();
+  let query = getDb().from("appointments").select("*").eq("status", "AVAILABLE").order("starts_at");
   if (input.hospitalId) query = query.eq("hospital_id", input.hospitalId);
   if (input.specialistId) query = query.eq("specialist_id", input.specialistId);
   if (input.from) query = query.gte("starts_at", input.from);
   if (input.to) query = query.lte("starts_at", input.to);
-  const { data, error } = await query;
+  const { data, error } = await query.returns<Appointment[]>();
   if (error) throw error;
   return data;
 }
