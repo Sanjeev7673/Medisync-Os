@@ -17,7 +17,7 @@ export default function SpecialistReviewDetailPage() {
   const [success, setSuccess] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch(`/api/requests/${encodeURIComponent(requestId)}`, { cache: "no-store" })
+    fetch(`/api/specialist/requests/${encodeURIComponent(requestId)}`, { cache: "no-store" })
       .then(async (response) => {
         const body = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(body.error ?? "Unable to load request");
