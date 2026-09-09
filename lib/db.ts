@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 
-function required(name: "SUPABASE_URL" | "SUPABASE_SERVICE_ROLE_KEY") {
+function required(name: "SUPABASE_URL" | "SUPABASE_SECRET_KEY") {
   const value = process.env[name];
   if (!value) throw new Error(`Missing environment variable: ${name}`);
   return value;
@@ -9,7 +9,7 @@ function required(name: "SUPABASE_URL" | "SUPABASE_SERVICE_ROLE_KEY") {
 export function getDb() {
   return createClient(
     required("SUPABASE_URL"),
-    required("SUPABASE_SERVICE_ROLE_KEY"),
+    required("SUPABASE_SECRET_KEY"),
     { auth: { autoRefreshToken: false, persistSession: false } },
   );
 }
