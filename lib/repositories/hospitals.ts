@@ -25,7 +25,7 @@ export async function getHospital(session: Session, hospitalId: string) {
 export async function listHospitals(session: Session, specialty?: string) {
   assertStaffOrAdmin(session);
   const db = getDb();
-  let query = db.from("hospitals").select("*").eq("operational_status", "ACTIVE").order("name").returns<Hospital[]>();
+  let query = db.from("hospitals").select("*").eq("operational_status", "ACTIVE").order("name");
   if (session.organizationId && session.role !== "admin") query = query.eq("organization_id", session.organizationId);
   if (specialty) {
     const { data, error } = await db.from("hospital_capabilities").select("hospital_id").eq("specialty", specialty).eq("operational_status", "ACTIVE").returns<{ hospital_id: string }[]>();
@@ -34,7 +34,7 @@ export async function listHospitals(session: Session, specialty?: string) {
     if (!ids.length) return [];
     query = query.in("id", ids);
   }
-  const { data, error } = await query;
+  const { data, error } = await query.returns<Hospital[]>();
   if (error) throw error;
   return data;
 }

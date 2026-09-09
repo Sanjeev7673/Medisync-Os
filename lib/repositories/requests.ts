@@ -38,7 +38,7 @@ function toPatientRequest(row: RequestRow): PatientRequest {
   const ai = row.ai_classification ?? {};
   return { request_id: row.request_id, patient_id: row.patient_id, request: row.description, request_source: row.request_source, document_uploaded: row.document_uploaded, request_type: row.request_type,
     specialty: typeof ai.specialty === "string" ? ai.specialty : null, specialist_review_required: typeof ai.specialist_review_required === "boolean" ? ai.specialist_review_required : null,
-    document_required: typeof ai.document_required === "boolean" ? ai.document_required : null, classification_reason: row.ai_reason,
+    document_required: typeof ai.document_required === "boolean" ? ai.document_required : null, classification_reason: row.ai_reason, ai_confidence: row.ai_confidence,
     specialist_review: { status: row.workflow_stage === "SPECIALIST_REVIEW" ? "PENDING" : null, reviewed_by: row.assigned_specialist_id, reviewed_at: null, notes: null }, hospital_matching: { status: row.workflow_stage === "HOSPITAL_MATCHING" ? "IN_PROGRESS" : null, recommendations: [] }, referral: { status: row.workflow_stage === "REFERRAL" ? "CREATED" : null, referral_id: null, hospital_id: null }, appointment: { status: row.workflow_stage === "APPOINTMENT_PENDING" ? "PENDING" : row.workflow_stage === "SCHEDULED" ? "SCHEDULED" : null, scheduled_at: null },
     workflow_status: row.workflow_stage === "SPECIALIST_REVIEW" ? "PENDING_REVIEW" : row.workflow_stage === "HOSPITAL_MATCHING" ? "HOSPITAL_MATCHING" : row.workflow_stage === "REFERRAL" ? "REFERRAL_CREATED" : row.workflow_stage === "APPOINTMENT_PENDING" ? "APPOINTMENT_PENDING" : row.workflow_stage as PatientRequest["workflow_status"], created_at: row.created_at, updated_at: row.updated_at };
 }
