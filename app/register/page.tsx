@@ -11,11 +11,13 @@ export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [errorCode, setErrorCode] = useState("");
   const [loading, setLoading] = useState(false);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
+    setErrorCode("");
     setLoading(true);
     try {
       const response = await fetch("/api/auth/register", {
@@ -24,7 +26,10 @@ export default function RegisterPage() {
         body: JSON.stringify({ name, email, password }),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data?.error || "Unable to create account");
+      if (!response.ok) {
+        setErrorCode(data?.code || "");
+        throw new Error(data?.error || "Unable to create account");
+      }
       router.replace(data.redirectTo || "/patient/dashboard");
       router.refresh();
     } catch (err) {
@@ -44,6 +49,7 @@ export default function RegisterPage() {
         <label className="mt-4 block text-sm font-bold">Email<input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" className="mt-2 w-full rounded-2xl border border-black/10 bg-[#FAFAFA] px-4 py-3 outline-none focus:border-[var(--care)]" /></label>
         <label className="mt-4 block text-sm font-bold">Password<input required type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" minLength={10} className="mt-2 w-full rounded-2xl border border-black/10 bg-[#FAFAFA] px-4 py-3 outline-none focus:border-[var(--care)]" /><span className="mt-2 block text-xs font-normal text-[var(--muted)]">10+ characters with uppercase, lowercase, and a number.</span></label>
         {error && <div className="mt-4 rounded-2xl bg-[var(--danger-soft)] px-4 py-3 text-xs font-semibold leading-5 text-[var(--danger)]">{error}</div>}
+        {errorCode === "ACCOUNT_EXISTS" && <Link href="/login" className="mt-3 flex w-full items-center justify-center rounded-2xl border border-black/10 px-5 py-3.5 text-sm font-bold text-[var(--care)] transition-transform hover:-translate-y-0.5">Go to sign in</Link>}
         <button disabled={loading} className="mt-6 flex w-full items-center justify-between rounded-2xl bg-[var(--ink)] px-5 py-4 text-sm font-bold text-white transition-transform hover:-translate-y-0.5 disabled:opacity-60"><span>{loading ? "Creating account…" : "Create account"}</span><span>→</span></button>
       </form></div></section>
     </main>
