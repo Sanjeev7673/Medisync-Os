@@ -53,7 +53,7 @@ export async function createRequest(session: Session, input: { request: string; 
 export async function listRequestsForPatient(session: Session) { if (!session.patientId) throw new Error("FORBIDDEN"); assertPatientOwner(session, session.patientId); const { data, error } = await getDb().from("requests").select("*").eq("patient_id", session.patientId).order("created_at", { ascending: false }).returns<RequestRow[]>(); if (error) throw error; return data.map(toPatientRequest); }
 export async function getRequestForPatient(session: Session, requestId: string) { if (!session.patientId) throw new Error("FORBIDDEN"); const { data, error } = await getDb().from("requests").select("*").eq("request_id", requestId).eq("patient_id", session.patientId).maybeSingle<RequestRow>(); if (error) throw error; return data ? toPatientRequest(data) : null; }
 
-async function resolveVerifiedSpecialist(session: Session) {
+export async function resolveVerifiedSpecialist(session: Session) {
   if (session.role !== "specialist") throw new Error("FORBIDDEN");
   const { data, error } = await getDb().from("specialists").select("id, credential_status, review_queue_status").eq("user_id", session.sub).maybeSingle<{ id: string; credential_status: string; review_queue_status: string }>();
   if (error) throw error;
