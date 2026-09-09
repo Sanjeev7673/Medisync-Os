@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useParams, useEffect, useState } from "react";
+import { useParams, useEffect, useState } from "next/navigation";
 import type { PatientRequest } from "@/lib/types";
 
 type AuditEntry = { action: string; created_at: string; actor_user_id?: string | null };
@@ -73,7 +73,7 @@ export default function SpecialistReviewDetailPage() {
       <section className="space-y-4 rounded-xl border p-5">
         <h2 className="text-lg font-semibold">Request</h2>
         <p className="whitespace-pre-wrap text-slate-700">{request.request}</p>
-        <div className="grid gap-3 sm:grid-cols-2 text-sm">
+        <div className="grid gap-3 text-sm sm:grid-cols-2">
           <div><span className="text-slate-500">Type:</span> {request.request_type ?? "Unclassified"}</div>
           <div><span className="text-slate-500">Specialty:</span> {request.specialty ?? "—"}</div>
           <div><span className="text-slate-500">AI confidence:</span> {request.ai_confidence == null ? "—" : `${Math.round(request.ai_confidence * 100)}%`}</div>
