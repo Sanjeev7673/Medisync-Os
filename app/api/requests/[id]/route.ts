@@ -36,6 +36,7 @@ export async function GET(
       specialist_review_required: record.specialist_review_required,
       document_required: record.document_required,
       classification_reason: record.classification_reason,
+      ai_confidence: record.ai_confidence,
       specialist_review: record.specialist_review,
       hospital_matching: record.hospital_matching,
       referral: record.referral,
