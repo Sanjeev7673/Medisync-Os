@@ -51,6 +51,45 @@ function assertStaffOrAdmin(session: Session) {
   }
 }
 
+async function getRequestMatchContext(requestId: string) {
+  const { data, error } = await getDb()
+    .from("requests")
+    .select("id, patient_id, request_type, description, workflow_stage, ai_classification")
+    .eq("request_id", requestId)
+    .maybeSingle<RequestMatchContext>();
+  if (error) throw error;
+  return data;
+}
+
+export async function assertHospitalCanMatchRequest(session: Session, requestId: string) {
+  if (!["admin", "hospital"].includes(session.role)) throw new Error("FORBIDDEN");
+  const request = await getRequestMatchContext(requestId);
+  if (!request) throw new Error("NOT_FOUND");
+  if (request.workflow_stage !== "HOSPITAL_MATCHING") throw new Error("INVALID_STAGE");
+  if (session.role === "admin") return request;
+  if (!session.organizationId) throw new Error("FORBIDDEN");
+
+  const specialty = typeof request.ai_classification?.specialty === "string"
+    ? request.ai_classification.specialty.trim()
+    : "";
+  if (!specialty) throw new Error("NO_MATCHING_SPECIALTY");
+
+  const { data, error } = await getDb()
+    .from("hospital_capabilities")
+    .select("hospital_id, hospitals!inner(id, organization_id, operational_status)")
+    .eq("specialty", specialty)
+    .eq("operational_status", "ACTIVE")
+    .eq("hospitals.operational_status", "ACTIVE")
+    .eq("hospitals.organization_id", session.organizationId)
+    .returns<{ hospital_id: string; hospitals: { id: string; organization_id: string | null; operational_status: string } }[]>();
+  if (error) throw error;
+  if (!data.length) throw new Error("FORBIDDEN");
+  if (session.hospitalId && !data.some((row) => row.hospital_id === session.hospitalId)) {
+    throw new Error("FORBIDDEN");
+  }
+  return request;
+}
+
 export async function getHospital(session: Session, hospitalId: string) {
   assertStaffOrAdmin(session);
   const db = getDb();
@@ -120,19 +159,8 @@ export async function findMatchingHospitals(
   session: Session,
   requestId: string,
 ): Promise<HospitalMatchCandidate[]> {
-  assertStaffOrAdmin(session);
+  const request = await assertHospitalCanMatchRequest(session, requestId);
   const db = getDb();
-
-  const { data: request, error: requestError } = await db
-    .from("requests")
-    .select("id, patient_id, request_type, description, workflow_stage, ai_classification")
-    .eq("request_id", requestId)
-    .maybeSingle<RequestMatchContext>();
-  if (requestError) throw requestError;
-  if (!request) return [];
-  if (request.workflow_stage !== "HOSPITAL_MATCHING") {
-    throw new Error("INVALID_STAGE");
-  }
 
   const specialty =
     typeof request.ai_classification?.specialty === "string"
