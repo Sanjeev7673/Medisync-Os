@@ -8,6 +8,7 @@ const OTP_RE = /^\d{6}$/;
 
 type RegistrationWorkflow = { triggered: boolean; reason?: string };
 
+// Keep workflow status type explicit so successful webhook dispatch can omit reason.
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => null);
