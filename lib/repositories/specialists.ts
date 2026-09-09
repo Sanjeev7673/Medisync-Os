@@ -27,9 +27,9 @@ export async function getMySpecialistProfile(session: Session) {
 
 export async function listSpecialists(session: Session, specialty?: string) {
   assertStaff(session);
-  let query = getDb().from("specialists").select("*").eq("credential_status", "VERIFIED").eq("review_queue_status", "AVAILABLE").order("full_name").returns<Specialist[]>();
+  let query = getDb().from("specialists").select("*").eq("credential_status", "VERIFIED").eq("review_queue_status", "AVAILABLE").order("full_name");
   if (specialty) query = query.eq("specialty", specialty);
-  const { data, error } = await query;
+  const { data, error } = await query.returns<Specialist[]>();
   if (error) throw error;
   return data;
 }
@@ -40,9 +40,9 @@ export async function listAffiliatedSpecialists(session: Session, hospitalId: st
   if (linkError) throw linkError;
   const ids = [...new Set(links.map((x) => x.specialist_id))];
   if (!ids.length) return [];
-  let query = getDb().from("specialists").select("*").in("id", ids).eq("credential_status", "VERIFIED").returns<Specialist[]>();
+  let query = getDb().from("specialists").select("*").in("id", ids).eq("credential_status", "VERIFIED");
   if (specialty) query = query.eq("specialty", specialty);
-  const { data, error } = await query;
+  const { data, error } = await query.returns<Specialist[]>();
   if (error) throw error;
   return data;
 }
