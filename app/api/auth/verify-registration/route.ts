@@ -6,6 +6,8 @@ import { hashOtp, OTP_MAX_ATTEMPTS } from "@/lib/registration-otp";
 
 const OTP_RE = /^\d{6}$/;
 
+type RegistrationWorkflow = { triggered: boolean; reason?: string };
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => null);
@@ -52,7 +54,7 @@ export async function POST(req: NextRequest) {
 
     const webhookUrl = process.env.SNS_WORKBENCH_WEBHOOK_URL;
     const webhookSecret = process.env.MEDISYNC_WEBHOOK_SECRET;
-    const workflow: { triggered: boolean; reason?: string } = { triggered: false, reason: "Workflow webhook is not configured" };
+    const workflow: RegistrationWorkflow = { triggered: false, reason: "Workflow webhook is not configured" };
     if (webhookUrl && webhookSecret) {
       const webhookResponse = await fetch(webhookUrl, {
         method: "POST",
