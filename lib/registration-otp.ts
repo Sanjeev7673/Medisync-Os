@@ -18,22 +18,12 @@ export async function sendRegistrationOtp(email: string, otp: string, name: stri
 
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({
       from,
       to: [email],
       subject: "Your MediSync verification code",
-      html: `
-        <div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;padding:32px;color:#18202a">
-          <h2 style="margin:0 0 12px">Verify your MediSync email</h2>
-          <p style="line-height:1.6">Hi ${escapeHtml(name)}, use this one-time code to complete your MediSync patient registration:</p>
-          <div style="font-size:32px;font-weight:800;letter-spacing:8px;padding:20px 0">${otp}</div>
-          <p style="color:#667085;line-height:1.6">This code expires in ${OTP_TTL_MINUTES} minutes. If you did not start this registration, you can safely ignore this email.</p>
-        </div>
-      `,
+      html: `<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;padding:32px;color:#18202a"><h2 style="margin:0 0 12px">Verify your MediSync email</h2><p style="line-height:1.6">Hi ${escapeHtml(name)}, use this one-time code to complete your MediSync patient registration:</p><div style="font-size:32px;font-weight:800;letter-spacing:8px;padding:20px 0">${otp}</div><p style="color:#667085;line-height:1.6">This code expires in ${OTP_TTL_MINUTES} minutes. If you did not start this registration, you can safely ignore this email.</p></div>`,
     }),
     cache: "no-store",
   });
@@ -45,5 +35,6 @@ export async function sendRegistrationOtp(email: string, otp: string, name: stri
 }
 
 function escapeHtml(value: string) {
-  return value.replace(/[&<>\"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" })[char] ?? char);
+  const entities: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" };
+  return value.replace(/[&<>\"']/g, (char) => entities[char] ?? char);
 }
