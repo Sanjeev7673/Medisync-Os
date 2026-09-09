@@ -43,3 +43,14 @@ export async function listAuditForRequest(session: Session, requestId: string) {
   if (error) throw error;
   return data;
 }
+
+export async function listAuditForSpecialist(session: Session, requestId: string, specialistId: string) {
+  if (session.role !== "specialist") throw new Error("FORBIDDEN");
+  const { data: request, error: requestError } = await getDb().from("requests").select("id, assigned_specialist_id").eq("request_id", requestId).maybeSingle<{ id: string; assigned_specialist_id: string | null }>();
+  if (requestError) throw requestError;
+  if (!request) throw new Error("NOT_FOUND");
+  if (request.assigned_specialist_id !== specialistId) throw new Error("FORBIDDEN");
+  const { data, error } = await getDb().from("audit_logs").select("*").eq("request_id", requestId).order("created_at", { ascending: true }).returns<AuditRow[]>();
+  if (error) throw error;
+  return data;
+}

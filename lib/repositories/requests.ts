@@ -47,12 +47,37 @@ export async function createRequest(session: Session, input: { request: string; 
   if (session.role !== "patient" || !session.patientId || session.sub !== session.patientId) throw new Error("FORBIDDEN");
   const description = input.request.trim(); if (!description) throw new Error("INVALID_REQUEST");
   const requestId = `REQ-${randomUUID().slice(0, 8).toUpperCase()}`;
-  const { data, error } = await getDb().rpc("create_request_with_audit", { p_request_id: requestId, p_patient_id: session.patientId, p_description: description, p_request_source: input.request_source ?? "patient_portal", p_document_uploaded: Boolean(input.document_uploaded), p_actor_user_id: session.sub, p_actor_role: session.role }).single<RequestRow>();
-  if (error) throw error;
+  const { data, error } = await getDb().rpc("create_request_with_audit", { p_request_id: requestId, p_patient_id: session.patientId, p_description: description, p_request_source: input.request_source ?? "patient_portal", p_document_uploaded: Boolean(input.document_uploaded), p_actor_user_id: session.sub, p_actor_role: session.role }).single<RequestRow>(); if (error) throw error;
   return { ...toPatientRequest(data), db_id: data.id };
 }
 export async function listRequestsForPatient(session: Session) { if (!session.patientId) throw new Error("FORBIDDEN"); assertPatientOwner(session, session.patientId); const { data, error } = await getDb().from("requests").select("*").eq("patient_id", session.patientId).order("created_at", { ascending: false }).returns<RequestRow[]>(); if (error) throw error; return data.map(toPatientRequest); }
 export async function getRequestForPatient(session: Session, requestId: string) { if (!session.patientId) throw new Error("FORBIDDEN"); const { data, error } = await getDb().from("requests").select("*").eq("request_id", requestId).eq("patient_id", session.patientId).maybeSingle<RequestRow>(); if (error) throw error; return data ? toPatientRequest(data) : null; }
+
+export async function resolveVerifiedSpecialist(session: Session) {
+  if (session.role !== "specialist") throw new Error("FORBIDDEN");
+  const { data, error } = await getDb().from("specialists").select("id, credential_status, review_queue_status").eq("user_id", session.sub).maybeSingle<{ id: string; credential_status: string; review_queue_status: string }>();
+  if (error) throw error;
+  if (!data) throw new Error("SPECIALIST_PROFILE_NOT_FOUND");
+  if (data.credential_status !== "VERIFIED") throw new Error("SPECIALIST_NOT_VERIFIED");
+  if (data.review_queue_status === "INACTIVE") throw new Error("SPECIALIST_QUEUE_INACTIVE");
+  return data;
+}
+
+export async function listRequestsForSpecialist(session: Session) {
+  const specialist = await resolveVerifiedSpecialist(session);
+  const { data, error } = await getDb().from("requests").select("*").eq("workflow_stage", "SPECIALIST_REVIEW").eq("assigned_specialist_id", specialist.id).order("created_at", { ascending: false }).returns<RequestRow[]>();
+  if (error) throw error;
+  return data.map(toPatientRequest);
+}
+
+export async function getRequestForSpecialist(session: Session, requestId: string) {
+  const specialist = await resolveVerifiedSpecialist(session);
+  const { data, error } = await getDb().from("requests").select("*").eq("request_id", requestId).maybeSingle<RequestRow>();
+  if (error) throw error;
+  if (!data) return null;
+  if (data.assigned_specialist_id !== specialist.id) throw new Error("FORBIDDEN");
+  return toPatientRequest(data);
+}
 
 export async function assignSpecialist(session: Session, requestId: string, specialistId: string) {
   if (!["admin", "hospital"].includes(session.role)) throw new Error("FORBIDDEN"); const current = await getRequestRow(requestId); if (!current) throw new Error("NOT_FOUND"); if (session.role === "hospital") await assertHospitalTenant(session, current.id);
