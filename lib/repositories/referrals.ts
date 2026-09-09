@@ -30,6 +30,41 @@ export async function createReferral(session: Session, input: { requestId: strin
   const { data, error } = await getDb().rpc("create_referral_with_audit", { p_referral_id: referral_id, p_request_id: input.requestId, p_hospital_id: input.hospitalId, p_specialist_id: input.specialistId ?? null, p_clinical_summary: input.clinicalSummary ?? null, p_reason: input.reason ?? null, p_actor_user_id: session.sub, p_actor_role: session.role }).single<Referral>(); if (error) throw error;
   return data;
 }
+
+export async function assignHospitalAndCreateReferral(
+  session: Session,
+  input: { requestId: string; hospitalId: string; specialistId?: string; clinicalSummary?: string; reason?: string },
+) {
+  if (!["admin", "hospital"].includes(session.role)) throw new Error("FORBIDDEN");
+  if (session.role === "hospital") await assertHospitalTenant(session, input.hospitalId);
+
+  const { data: request, error: requestError } = await getDb()
+    .from("requests")
+    .select("id, workflow_stage, updated_at")
+    .eq("request_id", input.requestId)
+    .maybeSingle<{ id: string; workflow_stage: string; updated_at: string }>();
+  if (requestError) throw requestError;
+  if (!request) throw new Error("NOT_FOUND");
+  if (request.workflow_stage !== "HOSPITAL_MATCHING") throw new Error("INVALID_STAGE");
+
+  const referralId = `REF-${randomUUID().slice(0, 8).toUpperCase()}`;
+  const { data, error } = await getDb()
+    .rpc("assign_hospital_and_create_referral_with_audit", {
+      p_request_db_id: request.id,
+      p_expected_updated_at: request.updated_at,
+      p_referral_id: referralId,
+      p_hospital_id: input.hospitalId,
+      p_specialist_id: input.specialistId ?? null,
+      p_clinical_summary: input.clinicalSummary ?? null,
+      p_reason: input.reason ?? null,
+      p_actor_user_id: session.sub,
+      p_actor_role: session.role,
+    })
+    .single<Referral>();
+  if (error) throw error;
+  return data;
+}
+
 export async function getReferral(session: Session, referralId: string) { const data = await getReferralRow(referralId); if (!data) return null; await assertReferralAccess(session, data); return data; }
 export async function listReferralsForHospital(session: Session, hospitalId: string) { await assertHospitalTenant(session, hospitalId); const { data, error } = await getDb().from("referrals").select("*").eq("hospital_id", hospitalId).order("created_at", { ascending: false }).returns<Referral[]>(); if (error) throw error; return data; }
 export async function transitionReferral(session: Session, referralId: string, nextStatus: Referral["status"]) {
