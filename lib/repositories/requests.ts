@@ -53,30 +53,30 @@ export async function createRequest(session: Session, input: { request: string; 
 export async function listRequestsForPatient(session: Session) { if (!session.patientId) throw new Error("FORBIDDEN"); assertPatientOwner(session, session.patientId); const { data, error } = await getDb().from("requests").select("*").eq("patient_id", session.patientId).order("created_at", { ascending: false }).returns<RequestRow[]>(); if (error) throw error; return data.map(toPatientRequest); }
 export async function getRequestForPatient(session: Session, requestId: string) { if (!session.patientId) throw new Error("FORBIDDEN"); const { data, error } = await getDb().from("requests").select("*").eq("request_id", requestId).eq("patient_id", session.patientId).maybeSingle<RequestRow>(); if (error) throw error; return data ? toPatientRequest(data) : null; }
 
-export async function listRequestsForSpecialist(session: Session) {
+async function resolveVerifiedSpecialist(session: Session) {
   if (session.role !== "specialist") throw new Error("FORBIDDEN");
+  const { data, error } = await getDb().from("specialists").select("id, credential_status, review_queue_status").eq("user_id", session.sub).maybeSingle<{ id: string; credential_status: string; review_queue_status: string }>();
+  if (error) throw error;
+  if (!data) throw new Error("SPECIALIST_PROFILE_NOT_FOUND");
+  if (data.credential_status !== "VERIFIED") throw new Error("SPECIALIST_NOT_VERIFIED");
+  if (data.review_queue_status === "INACTIVE") throw new Error("SPECIALIST_QUEUE_INACTIVE");
+  return data;
+}
 
-  const { data: specialist, error: specialistError } = await getDb()
-    .from("specialists")
-    .select("id, credential_status, review_queue_status")
-    .eq("user_id", session.sub)
-    .maybeSingle<{ id: string; credential_status: string; review_queue_status: string }>();
-
-  if (specialistError) throw specialistError;
-  if (!specialist) throw new Error("SPECIALIST_PROFILE_NOT_FOUND");
-  if (specialist.credential_status !== "VERIFIED") throw new Error("SPECIALIST_NOT_VERIFIED");
-  if (specialist.review_queue_status === "INACTIVE") throw new Error("SPECIALIST_QUEUE_INACTIVE");
-
-  const { data, error } = await getDb()
-    .from("requests")
-    .select("*")
-    .eq("workflow_stage", "SPECIALIST_REVIEW")
-    .eq("assigned_specialist_id", specialist.id)
-    .order("created_at", { ascending: false })
-    .returns<RequestRow[]>();
-
+export async function listRequestsForSpecialist(session: Session) {
+  const specialist = await resolveVerifiedSpecialist(session);
+  const { data, error } = await getDb().from("requests").select("*").eq("workflow_stage", "SPECIALIST_REVIEW").eq("assigned_specialist_id", specialist.id).order("created_at", { ascending: false }).returns<RequestRow[]>();
   if (error) throw error;
   return data.map(toPatientRequest);
+}
+
+export async function getRequestForSpecialist(session: Session, requestId: string) {
+  const specialist = await resolveVerifiedSpecialist(session);
+  const { data, error } = await getDb().from("requests").select("*").eq("request_id", requestId).maybeSingle<RequestRow>();
+  if (error) throw error;
+  if (!data) return null;
+  if (data.assigned_specialist_id !== specialist.id) throw new Error("FORBIDDEN");
+  return toPatientRequest(data);
 }
 
 export async function assignSpecialist(session: Session, requestId: string, specialistId: string) {
