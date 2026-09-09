@@ -42,7 +42,8 @@ export async function POST(req: NextRequest) {
     const response = NextResponse.json({ authenticated: true, user: { id: user.id, email: user.email, name: user.name, role: "patient" }, redirectTo: dashboardForRole("patient") }, { status: 201 });
     response.cookies.set(SESSION_COOKIE, session, sessionCookieOptions());
     return response;
-  } catch {
+  } catch (error) {
+    console.error("MediSync registration failure:", error);
     return NextResponse.json({ error: "Registration service unavailable" }, { status: 503 });
   }
 }
