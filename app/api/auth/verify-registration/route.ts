@@ -1,0 +1,85 @@
+import { NextRequest, NextResponse } from "next/server";
+import { createSession, dashboardForRole, sessionCookieOptions, SESSION_COOKIE } from "@/lib/auth";
+import { getDb } from "@/lib/db";
+import { createRequest } from "@/lib/repositories/requests";
+import { hashOtp, OTP_MAX_ATTEMPTS } from "@/lib/registration-otp";
+
+const OTP_RE = /^\d{6}$/;
+
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json().catch(() => null);
+    const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
+    const otp = typeof body?.otp === "string" ? body.otp.trim() : "";
+    const concern = typeof body?.concern === "string" ? body.concern.trim() : "";
+
+    if (!email || !OTP_RE.test(otp)) return NextResponse.json({ error: "Enter the 6-digit verification code." }, { status: 400 });
+    if (!concern || concern.length < 10 || concern.length > 2000) return NextResponse.json({ error: "Please describe what you need help with (10–2000 characters)." }, { status: 400 });
+
+    const db = getDb();
+    const { data: pending, error: pendingError } = await db.from("pending_registrations").select("id,email,name,password_hash,otp_hash,otp_expires_at,attempts").eq("email", email).maybeSingle<{
+      id: string; email: string; name: string; password_hash: string; otp_hash: string; otp_expires_at: string; attempts: number;
+    }>();
+    if (pendingError) throw pendingError;
+    if (!pending) return NextResponse.json({ error: "This verification session has expired. Please start registration again.", code: "VERIFICATION_EXPIRED" }, { status: 410 });
+    if (new Date(pending.otp_expires_at).getTime() <= Date.now()) {
+      await db.from("pending_registrations").delete().eq("id", pending.id);
+      return NextResponse.json({ error: "This verification code has expired. Please request a new code.", code: "OTP_EXPIRED" }, { status: 410 });
+    }
+    if (pending.attempts >= OTP_MAX_ATTEMPTS) {
+      return NextResponse.json({ error: "Too many incorrect attempts. Please start registration again.", code: "OTP_LOCKED" }, { status: 429 });
+    }
+    if (hashOtp(otp) !== pending.otp_hash) {
+      await db.from("pending_registrations").update({ attempts: pending.attempts + 1 }).eq("id", pending.id);
+      return NextResponse.json({ error: "Incorrect verification code. Please try again.", code: "OTP_INVALID" }, { status: 400 });
+    }
+
+    const { data: existingUser, error: existingError } = await db.from("users").select("id").eq("email", email).maybeSingle<{ id: string }>();
+    if (existingError) throw existingError;
+    if (existingUser) {
+      await db.from("pending_registrations").delete().eq("id", pending.id);
+      return NextResponse.json({ error: "An account with this email already exists. Please sign in instead.", code: "ACCOUNT_EXISTS", redirectTo: "/login" }, { status: 409 });
+    }
+
+    const { data: user, error: userError } = await db.from("users").insert({
+      email: pending.email,
+      password_hash: pending.password_hash,
+      name: pending.name,
+      role: "PATIENT",
+      status: "ACTIVE",
+    }).select("id,email,name,role,organization_id,status").single<{ id: string; email: string; name: string; role: "PATIENT"; organization_id: string | null; status: string }>();
+    if (userError) {
+      if (userError.code === "23505") return NextResponse.json({ error: "An account with this email already exists. Please sign in instead.", code: "ACCOUNT_EXISTS", redirectTo: "/login" }, { status: 409 });
+      throw userError;
+    }
+    if (!user) throw new Error("Registration did not return the created user");
+
+    await db.from("pending_registrations").delete().eq("id", pending.id);
+
+    const session = await createSession({ sub: user.id, email: user.email, name: user.name, role: "patient", patientId: user.id });
+    const sessionRequest = { sub: user.id, email: user.email, name: user.name, role: "patient" as const, patientId: user.id, sessionVersion: 1, exp: 0, iat: 0 };
+    const request = await createRequest(sessionRequest, { request: concern, request_source: "patient_portal", document_uploaded: false });
+
+    let workflow = { triggered: false, reason: "Workflow webhook is not configured" };
+    const webhookUrl = process.env.SNS_WORKBENCH_WEBHOOK_URL;
+    const webhookSecret = process.env.MEDISYNC_WEBHOOK_SECRET;
+    if (webhookUrl && webhookSecret) {
+      const response = await fetch(webhookUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-MediSync-Webhook-Secret": webhookSecret },
+        body: JSON.stringify({ stage: "request_creation", request_id: request.request_id, payload: { patient_id: request.patient_id, request: request.request, request_source: request.request_source, document_uploaded: request.document_uploaded } }),
+        cache: "no-store",
+      });
+      if (!response.ok) throw new Error(`SNS Workbench webhook failed (${response.status})`);
+      workflow = { triggered: true };
+    }
+
+    const response = NextResponse.json({ authenticated: true, user: { id: user.id, email: user.email, name: user.name, role: "patient" }, request, workflow, redirectTo: dashboardForRole("patient") }, { status: 201 });
+    response.cookies.set(SESSION_COOKIE, session, sessionCookieOptions());
+    return response;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (message === "FORBIDDEN") return NextResponse.json({ error: "Unable to create the patient request." }, { status: 403 });
+    return NextResponse.json({ error: "Unable to complete registration. Please try again." }, { status: 503 });
+  }
+}
