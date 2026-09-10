@@ -1,4 +1,5 @@
 import { createHash, randomInt } from "crypto";
+import nodemailer from "nodemailer";
 
 export const OTP_TTL_MINUTES = 10;
 export const OTP_MAX_ATTEMPTS = 5;
@@ -12,26 +13,30 @@ export function hashOtp(otp: string) {
 }
 
 export async function sendRegistrationOtp(email: string, otp: string, name: string) {
-  const apiKey = process.env.RESEND_API_KEY;
-  const from = process.env.RESEND_FROM_EMAIL;
-  if (!apiKey || !from) throw new Error("Registration email service is not configured");
+  const host = process.env.SMTP_HOST ?? "smtp.gmail.com";
+  const port = Number(process.env.SMTP_PORT ?? "465");
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS;
+  const from = process.env.SMTP_FROM ?? user;
 
-  const response = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      from,
-      to: [email],
-      subject: "Your MediSync verification code",
-      html: `<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;padding:32px;color:#18202a"><h2 style="margin:0 0 12px">Verify your MediSync email</h2><p style="line-height:1.6">Hi ${escapeHtml(name)}, use this one-time code to complete your MediSync patient registration:</p><div style="font-size:32px;font-weight:800;letter-spacing:8px;padding:20px 0">${otp}</div><p style="color:#667085;line-height:1.6">This code expires in ${OTP_TTL_MINUTES} minutes. If you did not start this registration, you can safely ignore this email.</p></div>`,
-    }),
-    cache: "no-store",
+  if (!user || !pass || !from) {
+    throw new Error("SMTP email service is not configured");
+  }
+
+  const transporter = nodemailer.createTransport({
+    host,
+    port,
+    secure: port === 465,
+    auth: { user, pass },
   });
 
-  if (!response.ok) {
-    const detail = await response.text().catch(() => "");
-    throw new Error(`Registration email delivery failed (${response.status})${detail ? `: ${detail.slice(0, 200)}` : ""}`);
-  }
+  await transporter.sendMail({
+    from,
+    to: email,
+    subject: "Your MediSync verification code",
+    text: `Hi ${name}, your MediSync verification code is ${otp}. This code expires in ${OTP_TTL_MINUTES} minutes. If you did not start this registration, you can safely ignore this email.`,
+    html: `<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;padding:32px;color:#18202a"><h2 style="margin:0 0 12px">Verify your MediSync email</h2><p style="line-height:1.6">Hi ${escapeHtml(name)}, use this one-time code to complete your MediSync patient registration:</p><div style="font-size:32px;font-weight:800;letter-spacing:8px;padding:20px 0">${otp}</div><p style="color:#667085;line-height:1.6">This code expires in ${OTP_TTL_MINUTES} minutes. If you did not start this registration, you can safely ignore this email.</p></div>`,
+  });
 }
 
 function escapeHtml(value: string) {
