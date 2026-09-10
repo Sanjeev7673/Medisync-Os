@@ -51,7 +51,8 @@ export async function POST(req: NextRequest) {
     });
     response.cookies.set(SESSION_COOKIE, session, sessionCookieOptions());
     return response;
-  } catch {
-    return NextResponse.json({ error: "Authentication service unavailable" }, { status: 503 });
+  } catch (error) {
+    console.error("MediSync login failure:", error instanceof Error ? error.message : "Unknown authentication error");
+    return NextResponse.json({ error: "Authentication service is temporarily unavailable. Please try again.", code: "AUTH_SERVICE_UNAVAILABLE" }, { status: 503 });
   }
 }
