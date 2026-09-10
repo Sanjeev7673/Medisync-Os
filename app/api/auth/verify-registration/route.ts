@@ -8,7 +8,6 @@ const OTP_RE = /^\d{6}$/;
 
 type RegistrationWorkflow = { triggered: boolean; reason?: string };
 
-// Keep workflow status type explicit so successful webhook dispatch can omit reason.
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => null);
@@ -56,23 +55,35 @@ export async function POST(req: NextRequest) {
     const webhookUrl = process.env.SNS_WORKBENCH_WEBHOOK_URL;
     const webhookSecret = process.env.MEDISYNC_WEBHOOK_SECRET;
     const workflow: RegistrationWorkflow = { triggered: false, reason: "Workflow webhook is not configured" };
+
     if (webhookUrl && webhookSecret) {
-      const webhookResponse = await fetch(webhookUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-MediSync-Webhook-Secret": webhookSecret },
-        body: JSON.stringify({ stage: "request_creation", request_id: request.request_id, payload: { patient_id: request.patient_id, request: request.request, request_source: request.request_source, document_uploaded: request.document_uploaded } }),
-        cache: "no-store",
-      });
-      if (!webhookResponse.ok) throw new Error(`SNS Workbench webhook failed (${webhookResponse.status})`);
-      workflow.triggered = true;
-      delete workflow.reason;
+      try {
+        const webhookResponse = await fetch(webhookUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-MediSync-Webhook-Secret": webhookSecret },
+          body: JSON.stringify({ stage: "request_creation", request_id: request.request_id, payload: { patient_id: request.patient_id, request: request.request, request_source: request.request_source, document_uploaded: request.document_uploaded } }),
+          cache: "no-store",
+          signal: AbortSignal.timeout(8000),
+        });
+        if (!webhookResponse.ok) {
+          console.error(`MediSync SNS webhook failed (${webhookResponse.status}) for ${request.request_id}`);
+          workflow.reason = `Workflow dispatch failed with HTTP ${webhookResponse.status}`;
+        } else {
+          workflow.triggered = true;
+          delete workflow.reason;
+        }
+      } catch (error) {
+        console.error("MediSync SNS webhook error:", error instanceof Error ? error.message : "Unknown webhook error");
+        workflow.reason = "Workflow dispatch failed; registration was completed successfully";
+      }
     }
 
     const response = NextResponse.json({ authenticated: true, user: { id: user.id, email: user.email, name: user.name, role: "patient" }, request, workflow, redirectTo: dashboardForRole("patient") }, { status: 201 });
     response.cookies.set(SESSION_COOKIE, session, sessionCookieOptions());
     return response;
   } catch (error) {
+    console.error("MediSync registration verification failure:", error instanceof Error ? error.message : "Unknown verification error");
     if (error instanceof Error && error.message === "FORBIDDEN") return NextResponse.json({ error: "Unable to create the patient request." }, { status: 403 });
-    return NextResponse.json({ error: "Unable to complete registration. Please try again." }, { status: 503 });
+    return NextResponse.json({ error: "Unable to complete registration. Please try again.", code: "REGISTRATION_COMPLETION_FAILED" }, { status: 503 });
   }
 }
