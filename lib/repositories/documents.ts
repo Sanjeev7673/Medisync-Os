@@ -46,3 +46,16 @@ export async function updateValidation(session: Session, documentId: string, sta
   if (error) throw error;
   return data;
 }
+
+export async function updateDocumentIntelligence(session: Session, documentId: string, input: { analysis: Record<string, unknown>; ocrText: string; validationStatus?: DocumentRow["validation_status"] }) {
+  const document = await getDocument(session, documentId);
+  if (!document) throw new Error("NOT_FOUND");
+  const { data, error } = await getDb().from("documents").update({
+    ocr_status: "COMPLETED",
+    ocr_text: input.ocrText,
+    validation_status: input.validationStatus ?? "VALID",
+    metadata: { ...(document.metadata ?? {}), ai_analysis: input.analysis, ai_analyzed_at: new Date().toISOString(), ai_model: process.env.OPENAI_DOCUMENT_MODEL || "gpt-5.6-luna" },
+  }).eq("id", documentId).eq("patient_id", session.patientId).select("*").single<DocumentRow>();
+  if (error) throw error;
+  return data;
+}
