@@ -34,10 +34,16 @@ export async function POST(req: NextRequest) {
     );
     if (pendingError) throw pendingError;
 
-    await sendRegistrationOtp(email, otp, name);
+    try {
+      await sendRegistrationOtp(email, otp, name);
+    } catch (error) {
+      console.error("MediSync registration email failure:", error instanceof Error ? error.message : "Unknown email error");
+      return NextResponse.json({ error: "We could not send the verification email. Please check the email service configuration and try again.", code: "EMAIL_DELIVERY_FAILED" }, { status: 503 });
+    }
 
     return NextResponse.json({ verificationRequired: true, email, expiresInSeconds: OTP_TTL_MINUTES * 60 }, { status: 202 });
-  } catch {
-    return NextResponse.json({ error: "Unable to send verification code. Please try again." }, { status: 503 });
+  } catch (error) {
+    console.error("MediSync registration failure:", error instanceof Error ? error.message : "Unknown registration error");
+    return NextResponse.json({ error: "Registration service is temporarily unavailable. Please try again.", code: "REGISTRATION_SERVICE_UNAVAILABLE" }, { status: 503 });
   }
 }
