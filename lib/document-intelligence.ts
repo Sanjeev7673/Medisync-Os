@@ -62,7 +62,6 @@ function required(name: string) {
 export async function analyzeDocument(input: { bytes: Buffer; contentType: string; filename: string }): Promise<DocumentAnalysis> {
   const client = new OpenAI({ apiKey: required("OPENAI_API_KEY") });
   const model = process.env.OPENAI_DOCUMENT_MODEL || "gpt-5.6-luna";
-  const dataUrl = `data:${input.contentType};base64,${input.bytes.toString("base64")}`;
 
   const response = await client.responses.create({
     model,
@@ -97,7 +96,7 @@ export async function analyzeDocument(input: { bytes: Buffer; contentType: strin
           {
             type: "input_file",
             filename: input.filename,
-            file_data: dataUrl,
+            file_data: input.bytes.toString("base64"),
           },
         ],
       },
