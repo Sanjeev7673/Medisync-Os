@@ -69,34 +69,29 @@ export async function analyzeDocument(input: { bytes: Buffer; contentType: strin
     input: [
       {
         role: "developer",
-        content: [
-          {
-            type: "input_text",
-            text: [
-              "You are MediSync Document Intelligence, an administrative healthcare document analysis assistant.",
-              "Analyze only what is explicitly present in the supplied patient report.",
-              "Extract report facts, values, reference ranges, dates, and observations accurately.",
-              "Never diagnose, prescribe, recommend treatment, or claim that an abnormal value proves a disease.",
-              "If the document is unclear or information is missing, say so explicitly.",
-              "Always require human specialist review before any clinical interpretation or action.",
-              "Use specialty_hint only as a routing hint based on the document content, not as a diagnosis.",
-              "Use urgent_review only when the report itself contains an explicitly urgent/critical flag or clearly documented critical result; otherwise use review_soon or routine.",
-              "Return only the requested structured object.",
-            ].join(" "),
-          },
-        ],
+        content: [{
+          type: "input_text",
+          text: [
+            "You are MediSync Document Intelligence, an administrative healthcare document analysis assistant.",
+            "Analyze only what is explicitly present in the supplied patient report.",
+            "Extract report facts, values, reference ranges, dates, and observations accurately.",
+            "Never diagnose, prescribe, recommend treatment, or claim that an abnormal value proves a disease.",
+            "If the document is unclear or information is missing, say so explicitly.",
+            "Always require human specialist review before any clinical interpretation or action.",
+            "Use specialty_hint only as a routing hint based on the document content, not as a diagnosis.",
+            "Use urgent_review only when the report itself contains an explicitly urgent/critical flag or clearly documented critical result; otherwise use review_soon or routine.",
+            "Return only the requested structured object.",
+          ].join(" "),
+        }],
       },
       {
         role: "user",
         content: [
-          {
-            type: "input_text",
-            text: `Analyze this healthcare document for administrative coordination. Filename: ${input.filename}`,
-          },
+          { type: "input_text", text: `Analyze this healthcare document for administrative coordination. Filename: ${input.filename}` },
           {
             type: "input_file",
             filename: input.filename,
-            file_data: input.bytes.toString("base64"),
+            file_data: `data:${input.contentType};base64,${input.bytes.toString("base64")}`,
           },
         ],
       },
