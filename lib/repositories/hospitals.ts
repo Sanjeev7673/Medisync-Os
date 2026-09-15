@@ -8,25 +8,27 @@ export type Hospital = {
 };
 export type HospitalCapability = { id: string; hospital_id: string; specialty: string | null; capability_type: "SPECIALTY" | "EQUIPMENT" | "SERVICE" | "FACILITY"; capability_name: string; insurance_networks: string[]; operational_status: "ACTIVE" | "INACTIVE"; metadata: Record<string, unknown> };
 
-function assertStaffOrAdmin(session: Session) { if (!["hospital", "admin", "insurance_agent", "specialist"].includes(session.role)) throw new Error("FORBIDDEN"); }
+function assertHospitalReader(session: Session) {
+  if (!["patient", "hospital", "admin", "insurance_agent", "specialist"].includes(session.role)) throw new Error("FORBIDDEN");
+}
 
 export async function getHospital(session: Session, hospitalId: string) {
-  assertStaffOrAdmin(session);
+  assertHospitalReader(session);
   const db = getDb();
   const { data, error } = await db.from("hospitals").select("*").eq("id", hospitalId).maybeSingle<Hospital>();
   if (error) throw error;
   if (!data) return null;
-  if (session.role === "admin") return data;
+  if (session.role === "admin" || session.role === "patient") return data;
   if (session.organizationId && data.organization_id !== session.organizationId) throw new Error("FORBIDDEN");
   if (session.role === "hospital" && session.hospitalId !== data.organization_id && session.hospitalId !== data.id) throw new Error("FORBIDDEN");
   return data;
 }
 
 export async function listHospitals(session: Session, specialty?: string) {
-  assertStaffOrAdmin(session);
+  assertHospitalReader(session);
   const db = getDb();
   let query = db.from("hospitals").select("*").eq("operational_status", "ACTIVE").order("name");
-  if (session.organizationId && session.role !== "admin") query = query.eq("organization_id", session.organizationId);
+  if (session.organizationId && !["admin", "patient"].includes(session.role)) query = query.eq("organization_id", session.organizationId);
   if (specialty) {
     const { data, error } = await db.from("hospital_capabilities").select("hospital_id").eq("specialty", specialty).eq("operational_status", "ACTIVE").returns<{ hospital_id: string }[]>();
     if (error) throw error;
