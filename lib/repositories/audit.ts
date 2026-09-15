@@ -36,6 +36,7 @@ export async function appendAudit(input: AuditInput) {
     .single<AuditRow>();
 
   if (error) throw error;
+
   return data;
 }
 
@@ -80,6 +81,7 @@ export async function listAuditForRequest(
     .returns<AuditRow[]>();
 
   if (error) throw error;
+
   return data;
 }
 
@@ -116,5 +118,6 @@ export async function listAuditForSpecialist(
     .returns<AuditRow[]>();
 
   if (error) throw error;
+
   return data;
 }
