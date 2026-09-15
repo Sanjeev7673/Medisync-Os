@@ -86,7 +86,7 @@ const instructions = [
 
 export async function analyzeDocument(input: { bytes: Buffer; contentType: string; filename: string }): Promise<DocumentAnalysis> {
   const apiKey = required("GEMINI_API_KEY");
-  const model = process.env.GEMINI_DOCUMENT_MODEL || "gemini-2.5-flash";
+  const model = process.env.GEMINI_DOCUMENT_MODEL || "gemini-3.6-flash";
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
   const response = await fetch(endpoint, {
     method: "POST",
