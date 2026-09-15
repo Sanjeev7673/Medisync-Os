@@ -2,30 +2,20 @@ import { createClient } from "@supabase/supabase-js";
 
 function required(name: "SUPABASE_URL" | "SUPABASE_SECRET_KEY") {
   const value = process.env[name];
-
-  if (!value) {
-    throw new Error(`Missing environment variable: ${name}`);
-  }
-
+  if (!value) throw new Error(`Missing environment variable: ${name}`);
   return value;
 }
 
 export function getDb() {
-  return createClient(
-    required("SUPABASE_URL"),
-    required("SUPABASE_SECRET_KEY"),
-    {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    },
-  );
+  return createClient(required("SUPABASE_URL"), required("SUPABASE_SECRET_KEY"), {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
 }
 
 export type DbUser = {
   id: string;
   medisync_id: string;
+  medisync_id_source?: "PLATFORM" | "ABHA_VERIFIED";
   email: string;
   password_hash: string;
   name: string;
