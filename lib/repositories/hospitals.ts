@@ -5,6 +5,7 @@ export type Hospital = {
   id: string; organization_id: string | null; name: string; legal_name: string | null; registration_number: string | null;
   address_line1: string | null; address_line2: string | null; city: string | null; state: string | null; postal_code: string | null;
   country: string; phone: string | null; email: string | null; operational_status: "ACTIVE" | "INACTIVE" | "SUSPENDED"; created_at: string; updated_at: string;
+  medisync_tier: "Tier 1" | "Tier 2" | "Tier 3" | null; tier_basis: string | null; catalog_metadata: Record<string, unknown>;
 };
 export type HospitalCapability = { id: string; hospital_id: string; specialty: string | null; capability_type: "SPECIALTY" | "EQUIPMENT" | "SERVICE" | "FACILITY"; capability_name: string; insurance_networks: string[]; operational_status: "ACTIVE" | "INACTIVE"; metadata: Record<string, unknown> };
 
