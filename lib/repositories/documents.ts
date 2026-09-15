@@ -8,11 +8,45 @@ type DocumentRow = {
   ocr_text: string | null; validation_log: unknown[]; metadata: Record<string, unknown>; processing_status?: "UPLOADED" | "PROCESSING" | "COMPLETED" | "FAILED"; processing_error?: string | null; processed_at?: string | null; created_at: string; updated_at: string;
 };
 
-function assertPatient(session: Session, patientId: string) { if (session.role !== "patient" || session.sub !== patientId || session.patientId !== patientId) throw new Error("FORBIDDEN"); }
+function assertPatient(session: Session, patientId: string) {
+  if (session.role !== "patient" || session.sub !== patientId || session.patientId !== patientId) throw new Error("FORBIDDEN");
+}
+
+async function resolveRequestId(session: Session, patientId: string, requestId?: string) {
+  if (!requestId) return null;
+  assertPatient(session, patientId);
+
+  const db = getDb();
+  // The UI/API uses the human-facing REQ-... identifier, while documents.request_id
+  // is a UUID foreign key. Resolve it server-side and keep the database normalized.
+  const { data, error } = await db
+    .from("requests")
+    .select("id,request_id")
+    .eq("patient_id", patientId)
+    .or(`request_id.eq.${requestId},id.eq.${requestId}`)
+    .maybeSingle<{ id: string; request_id: string }>();
+
+  if (error) throw error;
+  if (!data) throw new Error("REQUEST_NOT_FOUND");
+  return data.id;
+}
 
 export async function createDocumentMetadata(session: Session, input: { patientId: string; requestId?: string; referralId?: string; bucket: string; path: string; originalFilename: string; contentType?: string; fileSizeBytes?: number; checksumSha256?: string; metadata?: Record<string, unknown> }) {
   assertPatient(session, input.patientId);
-  const { data, error } = await getDb().from("documents").insert({ patient_id: input.patientId, request_id: input.requestId ?? null, referral_id: input.referralId ?? null, storage_bucket: input.bucket, storage_path: input.path, original_filename: input.originalFilename, content_type: input.contentType ?? null, file_size_bytes: input.fileSizeBytes ?? null, checksum_sha256: input.checksumSha256 ?? null, metadata: input.metadata ?? {}, processing_status: "UPLOADED" }).select("*").single<DocumentRow>();
+  const requestUuid = await resolveRequestId(session, input.patientId, input.requestId);
+  const { data, error } = await getDb().from("documents").insert({
+    patient_id: input.patientId,
+    request_id: requestUuid,
+    referral_id: input.referralId ?? null,
+    storage_bucket: input.bucket,
+    storage_path: input.path,
+    original_filename: input.originalFilename,
+    content_type: input.contentType ?? null,
+    file_size_bytes: input.fileSizeBytes ?? null,
+    checksum_sha256: input.checksumSha256 ?? null,
+    metadata: input.metadata ?? {},
+    processing_status: "UPLOADED",
+  }).select("*").single<DocumentRow>();
   if (error) throw error;
   return data;
 }
