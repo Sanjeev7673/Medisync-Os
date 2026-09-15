@@ -1,16 +1,29 @@
-import { getDb } from "@/lib/db";
+export async function listAuditForRequest(session: Session, requestId: string) {
+  let auditRequestId = requestId;
 
-export async function writeAudit(input: {
-  actorUserId: string;
-  action: string;
-  targetUserId?: string;
-  metadata?: Record<string, unknown>;
-}) {
-  const { error } = await getDb().from("audit_logs").insert({
-    actor_user_id: input.actorUserId,
-    action: input.action,
-    target_user_id: input.targetUserId ?? null,
-    metadata: input.metadata ?? {},
-  });
+  if (session.role === "patient") {
+    const { data: request, error: requestError } = await getDb()
+      .from("requests")
+      .select("id")
+      .eq("request_id", requestId)
+      .eq("patient_id", session.patientId ?? "")
+      .maybeSingle<{ id: string }>();
+
+    if (requestError) throw requestError;
+    if (!request) throw new Error("FORBIDDEN");
+
+    auditRequestId = request.id;
+  } else if (session.role !== "admin") {
+    throw new Error("FORBIDDEN");
+  }
+
+  const { data, error } = await getDb()
+    .from("audit_logs")
+    .select("*")
+    .eq("request_id", auditRequestId)
+    .order("created_at", { ascending: true })
+    .returns<AuditRow[]>();
+
   if (error) throw error;
+  return data;
 }
