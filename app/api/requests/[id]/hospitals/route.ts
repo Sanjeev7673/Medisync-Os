@@ -25,9 +25,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         specialties: [...new Set(capabilities.map((item) => item.specialty).filter(Boolean))],
         matched_capabilities: matchedCapabilities.length ? matchedCapabilities : capabilityNames.slice(0, 8),
         match_basis: request.specialty ? `${matchedCapabilities.length} documented capability match${matchedCapabilities.length === 1 ? "" : "es"} for ${request.specialty}` : "Active provider with documented capabilities",
-        medisync_tier: "Pending verification",
+        medisync_tier: hospital.medisync_tier,
+        tier_basis: hospital.tier_basis,
+        catalog_metadata: hospital.catalog_metadata,
       };
     }));
+    matches.sort((a, b) => (a.medisync_tier || "Tier 9").localeCompare(b.medisync_tier || "Tier 9") || a.hospital_name.localeCompare(b.hospital_name));
     return NextResponse.json({ request_id: request.request_id, specialty: request.specialty, hospitals: matches });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error && error.message === "FORBIDDEN" ? "Forbidden" : "Unable to match hospitals" }, { status: 503 });
