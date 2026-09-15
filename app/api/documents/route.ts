@@ -44,6 +44,7 @@ export async function POST(req: NextRequest) {
   try {
     const form = await req.formData();
     const file = form.get("file");
+    const requestId = typeof form.get("request_id") === "string" ? String(form.get("request_id")) : undefined;
     if (!(file instanceof File)) return NextResponse.json({ error: "Please select a PDF or image report." }, { status: 400 });
     if (!ALLOWED_TYPES.has(file.type)) return NextResponse.json({ error: "Supported report formats are PDF, PNG, JPEG, and WEBP." }, { status: 400 });
     if (file.size <= 0 || file.size > MAX_FILE_BYTES) return NextResponse.json({ error: "Report must be between 1 byte and 15 MB." }, { status: 400 });
@@ -61,6 +62,7 @@ export async function POST(req: NextRequest) {
     try {
       document = await createDocumentMetadata(session, {
         patientId: session.patientId,
+        requestId,
         bucket: BUCKET,
         path,
         originalFilename: file.name,
@@ -94,12 +96,17 @@ export async function POST(req: NextRequest) {
             stage: "document_analysis",
             document_id: document.id,
             patient_id: session.patientId,
+            request_id: requestId,
             payload: {
               document_id: document.id,
               patient_id: session.patientId,
+              request_id: requestId ?? null,
               filename: file.name,
               document_type: analysis.document_type,
+              report_date: analysis.report_date,
               summary: analysis.summary,
+              findings: analysis.findings,
+              key_observations: analysis.key_observations,
               priority: analysis.priority,
               specialty_hint: analysis.specialty_hint,
               workflow: analysis.workflow,
