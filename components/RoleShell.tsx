@@ -47,22 +47,73 @@ export default function RoleShell({ role, children }: { role: keyof typeof navBy
     fetch("/api/auth/session", { cache: "no-store" }).then((r) => r.json()).then((data) => setUser(data?.user ?? null)).catch(() => undefined);
   }, []);
 
+  const homeHref = role === "patient" ? "/patient/dashboard" : role === "hospital" ? "/hospital/dashboard" : "/insurance/dashboard";
+
   return (
     <div className="mesh-bg min-h-screen text-[var(--ink)]">
+      <div className="pointer-events-none fixed inset-x-0 top-0 z-40 h-px bg-gradient-to-r from-transparent via-[var(--care)]/40 to-transparent" />
+
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-72 p-5 lg:block">
-        <div className="glass flex h-full flex-col rounded-[30px] p-4 shadow-[var(--shadow-md)]">
-          <Link href={role === "patient" ? "/patient/dashboard" : role === "hospital" ? "/hospital/dashboard" : "/insurance/dashboard"} className="flex items-center gap-3 px-2 py-3">
-            <Image src="/medisync-mark.svg" alt="MediSync" width={42} height={42} className="rounded-2xl" />
+        <div className="glass animate-slide-in flex h-full flex-col rounded-[30px] p-4 shadow-[var(--shadow-md)]">
+          <Link href={homeHref} className="group flex items-center gap-3 px-2 py-3">
+            <div className="relative transition-transform duration-300 group-hover:scale-105">
+              <Image src="/medisync-mark.svg" alt="MediSync" width={42} height={42} className="rounded-2xl" />
+              <span className="pulse-soft absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-[var(--success)] ring-4 ring-white/80" />
+            </div>
             <div><p className="font-display text-lg font-extrabold tracking-tight">MediSync</p><p className="text-[9px] font-bold uppercase tracking-[.2em] text-[var(--muted)]">Care OS</p></div>
           </Link>
-          <div className="mt-7 rounded-2xl bg-[var(--ink)] p-4 text-white"><p className="text-[10px] font-bold uppercase tracking-[.16em] text-white/50">Active workspace</p><p className="mt-1 font-display text-sm font-extrabold">{labels[role]}</p><p className="mt-1 truncate text-xs text-white/55">{user?.email ?? "Secure session"}</p></div>
+
+          <div className="animate-fade-up mt-7 rounded-2xl bg-[var(--ink)] p-4 text-white">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[10px] font-bold uppercase tracking-[.16em] text-white/50">Active workspace</p>
+              <span className="h-1.5 w-1.5 rounded-full bg-[var(--success)]" />
+            </div>
+            <p className="mt-1 font-display text-sm font-extrabold">{labels[role]}</p>
+            <p className="mt-1 truncate text-xs text-white/55">{user?.email ?? "Secure session"}</p>
+          </div>
+
           <nav className="mt-7 space-y-1">
-            {navByRole[role].map((item) => { const active = pathname === item.href || pathname.startsWith(`${item.href}/`); return <Link key={item.href} href={item.href} className={`flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-semibold transition-all ${active ? "bg-[var(--care)] text-white shadow-lg shadow-blue-900/10" : "text-[var(--muted-strong)] hover:bg-black/5"}`}><span className="flex h-7 w-7 items-center justify-center rounded-xl bg-black/5 text-xs">{item.icon}</span>{item.label}</Link>; })}
+            {navByRole[role].map((item, index) => {
+              const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`group animate-fade-up relative flex items-center gap-3 overflow-hidden rounded-2xl px-3 py-3 text-sm font-semibold transition-all duration-300 hover:-translate-y-0.5 ${active ? "bg-[var(--care)] text-white shadow-lg shadow-blue-900/10" : "text-[var(--muted-strong)] hover:bg-white hover:shadow-sm"}`}
+                  style={{ animationDelay: `${120 + index * 60}ms` }}
+                >
+                  {active && <span className="absolute inset-y-2 left-0 w-0.5 rounded-full bg-white/80" />}
+                  <span className={`flex h-8 w-8 items-center justify-center rounded-xl text-xs transition-transform duration-300 group-hover:scale-110 ${active ? "bg-white/10" : "bg-[var(--care-soft)] text-[var(--care)]"}`}>{item.icon}</span>
+                  <span>{item.label}</span>
+                  <span className={`ml-auto transition-all duration-300 ${active ? "translate-x-0 opacity-70" : "-translate-x-1 opacity-0 group-hover:translate-x-0 group-hover:opacity-40"}`}>→</span>
+                </Link>
+              );
+            })}
           </nav>
-          <div className="mt-auto border-t border-black/5 pt-4"><button type="button" onClick={() => signOut(router)} className="flex w-full items-center justify-between rounded-2xl px-3 py-3 text-sm font-semibold text-[var(--muted-strong)] hover:bg-black/5"><span>Sign out</span><span>↗</span></button></div>
+
+          <div className="mt-auto rounded-[22px] border border-black/5 bg-white/55 p-4 backdrop-blur-xl">
+            <div className="flex items-center gap-2">
+              <span className="pulse-soft h-2 w-2 rounded-full bg-[var(--success)]" />
+              <span className="text-[10px] font-bold uppercase tracking-[.16em] text-[var(--muted)]">Secure session</span>
+            </div>
+            <p className="mt-2 truncate text-xs font-semibold text-[var(--muted-strong)]">{user?.email ?? "Authenticated workspace"}</p>
+            <button type="button" onClick={() => signOut(router)} className="mt-3 flex w-full items-center justify-between rounded-xl px-2 py-2 text-xs font-bold text-[var(--muted-strong)] transition hover:bg-black/5"><span>Sign out</span><span>↗</span></button>
+          </div>
         </div>
       </aside>
-      <main className="min-h-screen lg:pl-72"><div className="mx-auto max-w-7xl px-5 py-5 md:px-8 md:py-8"><header className="mb-8 flex items-center justify-between lg:hidden"><Link href={role === "patient" ? "/patient/dashboard" : role === "hospital" ? "/hospital/dashboard" : "/insurance/dashboard"} className="flex items-center gap-2"><Image src="/medisync-mark.svg" alt="MediSync" width={38} height={38} className="rounded-xl" /><span className="font-display font-extrabold">MediSync</span></Link><button type="button" onClick={() => signOut(router)} className="rounded-xl bg-white/70 px-3 py-2 text-xs font-bold">Sign out</button></header>{children}</div></main>
+
+      <main className="min-h-screen lg:pl-72">
+        <div className="mx-auto max-w-7xl px-5 py-5 md:px-8 md:py-8">
+          <header className="animate-fade-up mb-8 flex items-center justify-between lg:hidden">
+            <Link href={homeHref} className="group flex items-center gap-2">
+              <div className="relative"><Image src="/medisync-mark.svg" alt="MediSync" width={38} height={38} className="rounded-xl transition-transform duration-300 group-hover:scale-105" /><span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-[var(--success)]" /></div>
+              <span className="font-display font-extrabold">MediSync</span>
+            </Link>
+            <button type="button" onClick={() => signOut(router)} className="motion-hover rounded-xl bg-white/75 px-3 py-2 text-xs font-bold shadow-sm">Sign out</button>
+          </header>
+          {children}
+        </div>
+      </main>
     </div>
   );
 }
