@@ -16,8 +16,13 @@ function requiredRole(pathname: string) {
 export async function middleware(req: NextRequest) {
   const pathname = req.nextUrl.pathname;
 
-  // SNS Workbench authenticates independently with the webhook secret/HMAC.
-  if (pathname === "/api/webhooks/sns") return NextResponse.next();
+  // SNS Workbench endpoints authenticate independently with their own webhook secret.
+  if (
+    pathname === "/api/webhooks/sns" ||
+    pathname === "/api/workbench/document-complete"
+  ) {
+    return NextResponse.next();
+  }
 
   // Public authentication endpoints and the login page must remain reachable.
   if (pathname === "/login" || pathname.startsWith("/api/auth/")) {
