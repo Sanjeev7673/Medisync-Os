@@ -37,7 +37,7 @@ export default function MediSyncJourney({ role }: { role: keyof typeof journeys 
         </div>
         <div className="relative flex min-w-max flex-1 items-center justify-between gap-0 py-1">
           <div className="absolute left-3 right-3 top-1/2 h-px -translate-y-1/2 bg-black/8" />
-          <div className="absolute left-3 top-1/2 h-px -translate-y-1/2 bg-[var(--care)] transition-all duration-700" style={{ width: `${items.length === 1 ? 0 : (activeIndex / (items.length - 1)) * 100}%` }} />
+          <div className="absolute left-3 top-1/2 h-px -translate-y-1/2 bg-[var(--care)] transition-all duration-700" style={{ width: `${(activeIndex / (items.length - 1)) * 100}%` }} />
           {items.map(([label, href], index) => {
             const active = index === activeIndex;
             const complete = index < activeIndex;
