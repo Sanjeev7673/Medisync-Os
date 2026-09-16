@@ -15,25 +15,21 @@ function secretStatus(request: NextRequest) {
   return {
     header_received: Boolean(provided),
     secret_configured: Boolean(expected),
-    secret_matches:
-      Boolean(provided) && Boolean(expected) && provided === expected,
+    secret_matches: Boolean(provided) && Boolean(expected) && provided === expected,
   };
 }
 
 export async function POST(request: NextRequest) {
   const status = secretStatus(request);
+  const debug = request.nextUrl.searchParams.get("debug") === "1";
 
-  if (request.headers.get("x-medisync-debug") === "true") {
+  if (debug) {
     return NextResponse.json(status);
   }
 
   if (!status.secret_configured) {
-    return NextResponse.json(
-      { error: "MEDISYNC_WEBHOOK_SECRET is not configured" },
-      { status: 503 },
-    );
+    return NextResponse.json({ error: "MEDISYNC_WEBHOOK_SECRET is not configured" }, { status: 503 });
   }
-
   if (!status.secret_matches) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -41,13 +37,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const documentId = String(body?.document_id || body?.documentId || "").trim();
-
-    if (!documentId) {
-      return NextResponse.json(
-        { error: "document_id is required" },
-        { status: 400 },
-      );
-    }
+    if (!documentId) return NextResponse.json({ error: "document_id is required" }, { status: 400 });
 
     const rawAnalysis = body?.analysis ?? body?.gemini_analysis ?? body?.result ?? body?.content;
     let candidate = rawAnalysis;
@@ -61,8 +51,7 @@ export async function POST(request: NextRequest) {
         try { candidate = JSON.parse(parts[0].text); } catch { candidate = {}; }
       }
     }
-    const raw = candidate && typeof candidate === "object" && !Array.isArray(candidate)
-      ? candidate as Record<string, unknown> : {};
+    const raw = candidate && typeof candidate === "object" && !Array.isArray(candidate) ? candidate as Record<string, unknown> : {};
     const rawFindings = Array.isArray(raw.findings) ? raw.findings : [];
     const findings = rawFindings.map((finding) => {
       const f = finding && typeof finding === "object" ? finding as Record<string, unknown> : {};
@@ -97,34 +86,13 @@ export async function POST(request: NextRequest) {
 
     const ocrText = String(body?.ocr_text ?? body?.ocrText ?? "");
     const db = getDb();
-    const { data: document, error: documentError } = await db
-      .from("documents")
-      .select("id,metadata")
-      .eq("id", documentId)
-      .maybeSingle<{ id: string; metadata: Record<string, unknown> }>();
+    const { data: document, error: documentError } = await db.from("documents").select("id,metadata").eq("id", documentId).maybeSingle<{ id: string; metadata: Record<string, unknown> }>();
     if (documentError) throw documentError;
     if (!document) return NextResponse.json({ error: "Document not found" }, { status: 404 });
 
     const now = new Date().toISOString();
-    const metadata = {
-      ...(document.metadata ?? {}),
-      ai_analysis: analysis,
-      ai_analyzed_at: now,
-      ai_model: "SNS Workbench + Gemini",
-      workbench_completed_at: now,
-    };
-    const { error: updateError } = await db
-      .from("documents")
-      .update({
-        ocr_status: "COMPLETED",
-        ocr_text: ocrText || null,
-        validation_status: analysis.requires_human_review ? "REQUIRES_REVIEW" : "VALID",
-        processing_status: "COMPLETED",
-        processing_error: null,
-        processed_at: now,
-        metadata,
-      })
-      .eq("id", documentId);
+    const metadata = { ...(document.metadata ?? {}), ai_analysis: analysis, ai_analyzed_at: now, ai_model: "SNS Workbench + Gemini", workbench_completed_at: now };
+    const { error: updateError } = await db.from("documents").update({ ocr_status: "COMPLETED", ocr_text: ocrText || null, validation_status: analysis.requires_human_review ? "REQUIRES_REVIEW" : "VALID", processing_status: "COMPLETED", processing_error: null, processed_at: now, metadata }).eq("id", documentId);
     if (updateError) throw updateError;
 
     const token = createReportShareToken(documentId);
