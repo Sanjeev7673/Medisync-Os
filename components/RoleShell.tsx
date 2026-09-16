@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ReactNode, useEffect, useState } from "react";
+import MediSyncJourney from "@/components/MediSyncJourney";
 
 const navByRole = {
   patient: [
@@ -104,13 +105,14 @@ export default function RoleShell({ role, children }: { role: keyof typeof navBy
 
       <main className="min-h-screen lg:pl-72">
         <div className="mx-auto max-w-7xl px-5 py-5 md:px-8 md:py-8">
-          <header className="animate-fade-up mb-8 flex items-center justify-between lg:hidden">
+          <header className="animate-fade-up mb-6 flex items-center justify-between lg:hidden">
             <Link href={homeHref} className="group flex items-center gap-2">
               <div className="relative"><Image src="/medisync-mark.svg" alt="MediSync" width={38} height={38} className="rounded-xl transition-transform duration-300 group-hover:scale-105" /><span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-[var(--success)]" /></div>
               <span className="font-display font-extrabold">MediSync</span>
             </Link>
             <button type="button" onClick={() => signOut(router)} className="motion-hover rounded-xl bg-white/75 px-3 py-2 text-xs font-bold shadow-sm">Sign out</button>
           </header>
+          <MediSyncJourney role={role} />
           {children}
         </div>
       </main>
