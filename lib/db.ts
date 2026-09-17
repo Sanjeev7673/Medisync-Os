@@ -17,7 +17,6 @@ export type DbUser = {
   medisync_id: string;
   medisync_id_source?: "PLATFORM" | "ABHA_VERIFIED";
   email: string;
-  password_hash: string;
   name: string;
   role: "PATIENT" | "SPECIALIST" | "HOSPITAL" | "INSURANCE" | "ADMIN";
   organization_id: string | null;
