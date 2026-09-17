@@ -1,0 +1,48 @@
+name: Clean document UI
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    if: startsWith(github.event.head_commit.message, 'chore(ui): add one-time document UI cleanup workflow')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Shorten document UI copy
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('components/DocumentIntelligence.tsx')
+          s = p.read_text()
+          replacements = {
+              'const stages = ["Upload", "OCR / extraction", "Sanitize", "AI analysis", "Human review"];': 'const stages = ["Upload", "OCR", "Validate", "AI Analysis", "Review"];',
+              'if (status === "PROCESSING") activeIndex = 2;': 'if (status === "PROCESSING") activeIndex = 2;',
+              'failed ? "Processing failed" : completed ? "Processing completed" : "Processing in progress"': 'failed ? "Failed" : completed ? "Completed" : "Processing"',
+              'failed ? error || "SNS Workbench could not complete this document." : completed ? "The structured analysis is ready for authorized review." : "SNS Agent Workbench is processing this document. This page updates automatically."': 'failed ? error || "Workflow failed" : completed ? "Report ready" : "AI workflow running"',
+              'AI document intelligence': 'Document AI',
+              'Upload a patient report.': 'Upload Report',
+              'MediSync securely sends PDF and medical images to SNS Agent Workbench for OCR, AI analysis and human review preparation.': 'PDF · PNG · JPEG · WEBP · Max 15 MB',
+              'Human-in-the-loop': 'Clinical Review',
+              'Medical report <span className="font-normal text-[var(--muted)]">PDF, PNG, JPEG or WEBP · max 15 MB</span>': 'Medical report <span className="font-normal text-[var(--muted)]">PDF · PNG · JPEG · WEBP · Max 15 MB</span>',
+              'Document uploaded successfully. SNS Agent Workbench has started OCR and AI processing.': 'Processing started',
+              'Uploading and starting Workbench…': 'Starting…',
+              'Analyze report': 'Analyze',
+          }
+          for old, new in replacements.items():
+              s = s.replace(old, new)
+          p.write_text(s)
+      - name: Commit cleanup
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add components/DocumentIntelligence.tsx
+          git diff --cached --quiet && exit 0
+          git commit -m "chore(ui): shorten document intelligence copy"
+          git push
