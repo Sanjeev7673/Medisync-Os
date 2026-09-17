@@ -28,7 +28,6 @@ export default function HomePage() {
   return (
     <main className="overflow-hidden bg-[var(--background)] text-[var(--ink)]">
       <div className="mesh-bg relative">
-        <div className="pointer-events-none absolute left-[4%] top-28 h-72 w-72 rounded-full bg-[#B9C5EC]/35 blur-3xl mesh-orb" />
         <div className="pointer-events-none absolute right-[-6%] top-10 h-96 w-96 rounded-full bg-[#CFEFE3]/45 blur-3xl mesh-orb-delay" />
 
         <nav className="relative z-20 mx-auto flex max-w-7xl items-center justify-between px-5 py-6 md:px-8">
