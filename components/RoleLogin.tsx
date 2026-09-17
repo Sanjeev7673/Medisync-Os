@@ -31,6 +31,7 @@ export default function RoleLogin({ role }: { role: LoginRole }) {
   const config = ROLE_CONFIG[role];
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -60,7 +61,7 @@ export default function RoleLogin({ role }: { role: LoginRole }) {
         <div className="reveal reveal-delay-1 mx-auto w-full max-w-xl"><div className="glass rounded-[34px] p-2 shadow-[0_28px_90px_rgba(18,22,29,.14)]"><form onSubmit={submit} className="rounded-[28px] bg-white p-7 sm:p-9">
           <div className="mb-7"><p className="text-xs font-bold uppercase tracking-[.18em] text-[var(--care)]">{config.label}</p><h2 className="mt-3 font-display text-3xl font-extrabold tracking-tight">Sign in securely.</h2><p className="mt-3 text-sm leading-6 text-[var(--muted)]">This portal only accepts accounts assigned to the {config.label.replace(" Portal", "").toLowerCase()} workspace.</p></div>
           <label className="block text-sm font-bold">Email<input required type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} className="mt-2 w-full rounded-2xl border border-black/10 bg-[#FAFAFA] px-4 py-3 outline-none transition focus:border-[var(--care)]" /></label>
-          <label className="mt-4 block text-sm font-bold">Password<input required type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} className="mt-2 w-full rounded-2xl border border-black/10 bg-[#FAFAFA] px-4 py-3 outline-none transition focus:border-[var(--care)]" /></label>
+          <label className="mt-4 block text-sm font-bold">Password<div className="relative mt-2"><input required type={showPassword ? "text" : "password"} autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full rounded-2xl border border-black/10 bg-[#FAFAFA] px-4 py-3 pr-12 outline-none transition focus:border-[var(--care)]" /><button type="button" aria-label={showPassword ? "Hide password" : "Show password"} onClick={() => setShowPassword((visible) => !visible)} className="absolute right-3 top-1/2 -translate-y-1/2 rounded-xl p-2 text-[var(--muted-strong)] transition hover:bg-black/5 hover:text-[var(--ink)]">{showPassword ? "◉" : "◌"}</button></div></label>
           <div className="mt-3 text-right"><Link href="/forgot-password" className="text-sm font-bold text-[var(--care)] hover:underline">Forgot password?</Link></div>
           {error && <div className="mt-4 rounded-2xl bg-[var(--danger-soft)] px-4 py-3 text-xs font-semibold leading-5 text-[var(--danger)]">{error}</div>}
           <button disabled={loading} className="group mt-5 flex w-full items-center justify-between rounded-2xl bg-[var(--ink)] px-5 py-4 text-sm font-bold text-white shadow-xl transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"><span>{loading ? "Signing in…" : `Continue to ${config.label.replace(" Portal", "")}`}</span><span>→</span></button>
