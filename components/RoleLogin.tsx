@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, useState } from "react";
+import HealthcareMotion from "@/components/HealthcareMotion";
 
 type LoginRole = "patient" | "hospital" | "insurance_agent" | "admin";
 
@@ -88,6 +89,7 @@ export default function RoleLogin({ role }: { role: LoginRole }) {
           <h1 className="max-w-2xl font-display text-6xl font-extrabold leading-[.98] tracking-[-.045em] xl:text-7xl">{config.title}</h1>
           <p className="mt-7 max-w-xl text-lg leading-8 text-[var(--muted-strong)]">{config.description}</p>
           <div className="mt-8 inline-flex rounded-2xl bg-white/65 px-4 py-3 text-xs font-bold text-[var(--care)] backdrop-blur">{config.accent} · Verified role-based access</div>
+          <HealthcareMotion />
         </div>
 
         <div className="reveal reveal-delay-1 mx-auto w-full max-w-xl">
