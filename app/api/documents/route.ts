@@ -53,27 +53,24 @@ function extension(filename: string, contentType: string) {
 }
 
 /**
- * Sends the original uploaded document to SNS Agent Workbench.
+ * Sends the original uploaded document to the SINGLE common
+ * SNS Agent Workbench webhook.
+ *
+ * The webhook is the INITIAL/common entry point for every role.
+ * Patient document processing is identified by request_type.
  *
  * Workbench receives:
  * - file              -> original PDF/image binary
+ * - user_id           -> authenticated user UUID
+ * - role              -> trusted server-side role (PATIENT here)
+ * - request_type      -> DOCUMENT
+ * - request_id        -> MediSync request UUID
  * - document_id       -> MediSync document UUID
- * - patient_id        -> authenticated patient UUID
- * - request_id        -> optional MediSync request ID
+ * - patient_id        -> authenticated patient UUID (branch context)
  * - filename          -> original filename
  * - content_type      -> original MIME type
- *
- * The Workbench workflow then performs:
- *
- * Webhook Trigger
- *      ↓
- * Mistral OCR
- *      ↓
- * AI Analysis
- *      ↓
- * Convert to HTML
- *      ↓
- * PDF Generator
+ * - source            -> originating portal
+ * - stage             -> INITIAL
  */
 async function triggerWorkflow({
   bytes,
@@ -81,6 +78,7 @@ async function triggerWorkflow({
   filename,
   documentId,
   patientId,
+  userId,
   requestId,
 }: {
   bytes: Buffer;
@@ -88,7 +86,8 @@ async function triggerWorkflow({
   filename: string;
   documentId: string;
   patientId: string;
-  requestId?: string;
+  userId: string;
+  requestId: string;
 }) {
   const webhookUrl = process.env.SNS_WORKBENCH_WEBHOOK_URL;
   const webhookSecret = process.env.MEDISYNC_WEBHOOK_SECRET;
@@ -104,13 +103,11 @@ async function triggerWorkflow({
     const form = new FormData();
 
     /*
-     * IMPORTANT:
      * Workbench Mistral OCR is configured to read:
-     *
      * Input Type: Binary Data
      * Input Binary Field: file
      *
-     * Therefore the actual uploaded document must be sent
+     * Therefore the original uploaded document must be sent
      * as multipart/form-data under the field name "file".
      */
     const blob = new Blob([new Uint8Array(bytes)], {
@@ -120,15 +117,25 @@ async function triggerWorkflow({
     form.append("file", blob, filename);
 
     /*
-     * Metadata fields available to the Workbench workflow.
+     * Common INITIAL request context.
+     * Role is derived from the authenticated server session,
+     * never from a browser-supplied role field.
      */
+    form.append("user_id", userId);
+    form.append("role", "PATIENT");
+    form.append("request_type", "DOCUMENT");
+    form.append("request_id", requestId);
     form.append("document_id", documentId);
+
+    /*
+     * Patient-specific context is retained for the Patient branch.
+     */
     form.append("patient_id", patientId);
-    form.append("request_id", requestId ?? "");
+
     form.append("filename", filename);
     form.append("content_type", contentType);
     form.append("source", "medisync_patient_portal");
-    form.append("stage", "document_analysis");
+    form.append("stage", "INITIAL");
 
     const headers: Record<string, string> = {};
 
@@ -255,10 +262,16 @@ export async function POST(req: NextRequest) {
 
     const file = form.get("file");
 
+    /*
+     * Every upload gets a request UUID if the caller did not provide one.
+     * The same requestId is persisted with the document and sent to
+     * the common INITIAL Workbench webhook.
+     */
+    const requestIdValue = form.get("request_id");
     const requestId =
-      typeof form.get("request_id") === "string"
-        ? String(form.get("request_id"))
-        : undefined;
+      typeof requestIdValue === "string" && requestIdValue.trim()
+        ? requestIdValue.trim()
+        : randomUUID();
 
     if (!(file instanceof File)) {
       return NextResponse.json(
@@ -295,7 +308,6 @@ export async function POST(req: NextRequest) {
     /*
      * Convert uploaded file to Buffer once.
      * The same bytes are:
-     *
      * 1. Stored in Supabase Storage
      * 2. Sent to SNS Workbench
      */
@@ -359,7 +371,7 @@ export async function POST(req: NextRequest) {
           source: "patient_portal",
 
           /*
-           * Processing is now handled by SNS Agent Workbench.
+           * Processing is handled by SNS Agent Workbench.
            */
           processing: "sns_workbench_document_intelligence",
 
@@ -379,23 +391,18 @@ export async function POST(req: NextRequest) {
       );
 
       /*
-       * SEND ORIGINAL DOCUMENT TO SNS WORKBENCH.
+       * SEND ORIGINAL DOCUMENT TO THE SINGLE COMMON
+       * SNS WORKBENCH WEBHOOK.
        *
-       * There is NO analyzeDocument() call here.
+       * Common stage:
+       *   INITIAL
        *
-       * Therefore:
+       * Patient request context:
+       *   role=PATIENT
+       *   request_type=DOCUMENT
        *
-       * MediSync
-       *    ↓
-       * SNS Workbench
-       *    ↓
-       * Mistral OCR
-       *    ↓
-       * AI Analysis
-       *    ↓
-       * HTML
-       *    ↓
-       * PDF
+       * The Workbench Patient -> DOCUMENT branch can
+       * transition into document_analysis internally.
        */
       const workflow = await triggerWorkflow({
         bytes,
@@ -404,6 +411,7 @@ export async function POST(req: NextRequest) {
 
         documentId: document.id,
         patientId: session.patientId,
+        userId: session.sub,
         requestId,
       });
 
@@ -437,13 +445,10 @@ export async function POST(req: NextRequest) {
       /*
        * IMPORTANT:
        *
-       * We DO NOT call updateDocumentIntelligence()
-       * here because SNS Workbench has not necessarily
-       * finished OCR + AI analysis yet.
-       *
-       * The document remains in processing state until
-       * the Workbench workflow/callback persists the
-       * final analysis.
+       * We DO NOT call updateDocumentIntelligence() here because
+       * SNS Workbench has not necessarily finished OCR + AI analysis.
+       * The document remains in processing state until the final
+       * Workbench callback/result persistence is implemented.
        */
       return NextResponse.json(
         {
