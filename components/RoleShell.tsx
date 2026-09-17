@@ -17,6 +17,7 @@ const navByRole = {
   hospital: [
     { label: "Overview", href: "/hospital/dashboard", icon: "⌂" },
     { label: "Referrals", href: "/hospital/referrals", icon: "↗" },
+    { label: "Hospital matching", href: "/hospital/matching", icon: "⌕" },
     { label: "Capacity", href: "/hospital/capacity", icon: "▦" },
     { label: "Appointments", href: "/hospital/appointments", icon: "◷" },
     { label: "Profile", href: "/profile", icon: "◎" },
