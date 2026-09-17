@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { createGoogleOAuthState, GoogleOAuthMode, GoogleOAuthRole } from "@/lib/google-auth";
 
 const ROLES: GoogleOAuthRole[] = ["patient", "hospital", "insurance_agent", "admin"];
+const MODES: GoogleOAuthMode[] = ["signin", "signup"];
 
 function required(name: "SUPABASE_URL" | "SUPABASE_SECRET_KEY") {
   const value = process.env[name];
@@ -13,13 +14,16 @@ function required(name: "SUPABASE_URL" | "SUPABASE_SECRET_KEY") {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => null);
-    const role = typeof body?.role === "string" ? body.role as GoogleOAuthRole : "";
-    const mode = typeof body?.mode === "string" ? body.mode as GoogleOAuthMode : "";
+    const roleValue = typeof body?.role === "string" ? body.role : "";
+    const modeValue = typeof body?.mode === "string" ? body.mode : "";
     const details = body?.details && typeof body.details === "object" ? body.details as Record<string, string> : undefined;
 
-    if (!ROLES.includes(role) || !["signin", "signup"].includes(mode)) {
+    if (!ROLES.includes(roleValue as GoogleOAuthRole) || !MODES.includes(modeValue as GoogleOAuthMode)) {
       return NextResponse.json({ error: "Invalid Google authentication request." }, { status: 400 });
     }
+
+    const role = roleValue as GoogleOAuthRole;
+    const mode = modeValue as GoogleOAuthMode;
 
     if (mode === "signup") {
       const requiredFields: Record<GoogleOAuthRole, string[]> = {
