@@ -1,9 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
+
+type Role = "PATIENT" | "HOSPITAL" | "INSURANCE" | "ADMIN";
+
+const validRoles: Role[] = ["PATIENT", "HOSPITAL", "INSURANCE", "ADMIN"];
 
 export default function ForgotPasswordPage() {
+  const [role, setRole] = useState<Role>("PATIENT");
   const [email, setEmail] = useState("");
   const [otpSent, setOtpSent] = useState(false);
   const [otp, setOtp] = useState("");
@@ -15,10 +20,15 @@ export default function ForgotPasswordPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    const requestedRole = new URLSearchParams(window.location.search).get("role")?.toUpperCase() as Role | undefined;
+    if (requestedRole && validRoles.includes(requestedRole)) setRole(requestedRole);
+  }, []);
+
   async function requestOtp(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setError(""); setMessage(""); setLoading(true);
     try {
-      const response = await fetch("/api/auth/forgot-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }) });
+      const response = await fetch("/api/auth/forgot-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: email.trim().toLowerCase() }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data?.error || "Unable to send OTP");
       setOtpSent(true); setMessage("OTP sent to your registered email. Please check your inbox.");
@@ -28,13 +38,20 @@ export default function ForgotPasswordPage() {
 
   async function resetPassword(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setError(""); setMessage("");
+    if (otp.length !== 6) { setError("Please enter the 6-digit OTP."); return; }
     if (password !== confirmPassword) { setError("Passwords do not match."); return; }
     setLoading(true);
     try {
-      const response = await fetch("/api/auth/verify-forgot-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, otp, password }) });
+      const response = await fetch("/api/auth/sns", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "FORGOT_PASSWORD", role, otp, new_password: password }),
+      });
       const data = await response.json();
-      if (!response.ok) throw new Error(data?.error || "Unable to reset password");
-      setMessage(data.message); setOtp(""); setPassword(""); setConfirmPassword("");
+      const verified = data?.success === true || data?.status === "VERIFIED";
+      if (!response.ok || !verified) throw new Error(data?.message || "Unable to reset password");
+      alert(data?.message || "Password reset successful");
+      window.location.assign(`/signin?role=${role.toLowerCase()}`);
     } catch (err) { setError(err instanceof Error ? err.message : "Unable to reset password"); }
     finally { setLoading(false); }
   }
@@ -47,10 +64,11 @@ export default function ForgotPasswordPage() {
       <div className="mesh-orb-delay absolute -right-24 bottom-0 h-96 w-96 rounded-full bg-[#758FB5]/20 blur-3xl" />
       <div className="relative z-10 mx-auto flex min-h-[85vh] max-w-xl items-center justify-center">
         <div className="glass w-full rounded-[34px] p-2 shadow-[0_28px_90px_rgba(18,22,29,.14)]"><div className="rounded-[28px] bg-white p-7 sm:p-9">
-          <Link href="/login" className="text-xs font-bold text-[var(--care)]">← Back to portal</Link>
+          <Link href="/signin" className="text-xs font-bold text-[var(--care)]">← Back to sign in</Link>
           <p className="mt-8 text-xs font-bold uppercase tracking-[.18em] text-[var(--care)]">Account recovery</p>
           <h1 className="mt-3 font-display text-4xl font-extrabold tracking-tight">Forgot password?</h1>
           <p className="mt-3 text-sm leading-6 text-[var(--muted)]">Enter your registered email and MediSync will send a 6-digit OTP to verify your password reset.</p>
+          <div className="mt-5 rounded-2xl border border-black/10 bg-[#FAFAFA] px-4 py-3 text-xs font-bold text-[var(--muted-strong)]">Portal: {role}</div>
           {!otpSent ? <form onSubmit={requestOtp} className="mt-7"><label className="block text-sm font-bold">Email<input required type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} className="mt-2 w-full rounded-2xl border border-black/10 bg-[#FAFAFA] px-4 py-3 outline-none focus:border-[var(--care)]" /></label><button disabled={loading} className="mt-5 flex w-full items-center justify-between rounded-2xl bg-[var(--ink)] px-5 py-4 text-sm font-bold text-white shadow-xl disabled:opacity-60"><span>{loading ? "Sending OTP…" : "Send OTP"}</span><span>→</span></button></form> : <form onSubmit={resetPassword} className="mt-7 space-y-4">
             <label className="block text-sm font-bold">OTP<input required inputMode="numeric" pattern="[0-9]{6}" maxLength={6} value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))} className="mt-2 w-full rounded-2xl border border-black/10 bg-[#FAFAFA] px-4 py-3 text-center text-xl font-bold tracking-[.35em] outline-none focus:border-[var(--care)]" /></label>
             <label className="block text-sm font-bold">New password<div className="relative mt-2"><input required minLength={10} type={showPassword ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} className="w-full rounded-2xl border border-black/10 bg-[#FAFAFA] px-4 py-3 pr-14 outline-none focus:border-[var(--care)]" /><button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-2 top-1/2 -translate-y-1/2 rounded-xl p-2 text-[var(--muted)]" aria-label={showPassword ? "Hide password" : "Show password"}><EyeIcon off={!showPassword}/></button></div></label>
