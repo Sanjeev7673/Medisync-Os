@@ -55,9 +55,7 @@ function required(name: string) {
 function toBase64Url(bytes: Uint8Array) {
   let binary = "";
 
-  for (const byte of bytes) {
-    binary += String.fromCharCode(byte);
-  }
+  for (const byte of bytes) binary += String.fromCharCode(byte);
 
   return btoa(binary)
     .replace(/\+/g, "-")
@@ -66,9 +64,7 @@ function toBase64Url(bytes: Uint8Array) {
 }
 
 function fromBase64Url(value: string) {
-  const padded =
-    value.replace(/-/g, "+").replace(/_/g, "/") + "===";
-
+  const padded = value.replace(/-/g, "+").replace(/_/g, "/") + "===";
   const binary = atob(
     padded.slice(0, padded.length - (padded.length % 4)),
   );
@@ -79,26 +75,16 @@ function fromBase64Url(value: string) {
 async function deriveAesKey(usage: KeyUsage[]) {
   const material = await crypto.subtle.digest(
     "SHA-256",
-    new TextEncoder().encode(
-      `${required("MEDISYNC_SESSION_SECRET")}:encrypt`,
-    ),
+    new TextEncoder().encode(`${required("MEDISYNC_SESSION_SECRET")}:encrypt`),
   );
 
-  return crypto.subtle.importKey(
-    "raw",
-    material,
-    { name: "AES-GCM" },
-    false,
-    usage,
-  );
+  return crypto.subtle.importKey("raw", material, { name: "AES-GCM" }, false, usage);
 }
 
 async function getSigningKey() {
   const material = await crypto.subtle.digest(
     "SHA-256",
-    new TextEncoder().encode(
-      `${required("MEDISYNC_SESSION_SECRET")}:sign`,
-    ),
+    new TextEncoder().encode(`${required("MEDISYNC_SESSION_SECRET")}:sign`),
   );
 
   return crypto.subtle.importKey(
@@ -112,40 +98,26 @@ async function getSigningKey() {
 
 async function encrypt(payload: Session) {
   const iv = crypto.getRandomValues(new Uint8Array(12));
-
   const ciphertext = await crypto.subtle.encrypt(
-    {
-      name: "AES-GCM",
-      iv,
-    },
+    { name: "AES-GCM", iv },
     await deriveAesKey(["encrypt"]),
     new TextEncoder().encode(JSON.stringify(payload)),
   );
 
-  return `${toBase64Url(iv)}.${toBase64Url(
-    new Uint8Array(ciphertext),
-  )}`;
+  return `${toBase64Url(iv)}.${toBase64Url(new Uint8Array(ciphertext))}`;
 }
 
 async function decrypt(token: string) {
   const [ivPart, ciphertextPart] = token.split(".");
-
-  if (!ivPart || !ciphertextPart) {
-    return null;
-  }
+  if (!ivPart || !ciphertextPart) return null;
 
   const plaintext = await crypto.subtle.decrypt(
-    {
-      name: "AES-GCM",
-      iv: fromBase64Url(ivPart),
-    },
+    { name: "AES-GCM", iv: fromBase64Url(ivPart) },
     await deriveAesKey(["decrypt"]),
     fromBase64Url(ciphertextPart),
   );
 
-  return JSON.parse(
-    new TextDecoder().decode(plaintext),
-  ) as Session;
+  return JSON.parse(new TextDecoder().decode(plaintext)) as Session;
 }
 
 export async function createSession(
@@ -162,24 +134,15 @@ export async function createSession(
       .eq("id", input.sub)
       .maybeSingle();
 
-    if (error || !user) {
-      throw new Error(
-        "Unable to resolve user session version",
-      );
-    }
-
+    if (error || !user) throw new Error("Unable to resolve user session version");
     sessionVersion = Number(user.session_version);
   }
 
-  if (
-    !Number.isInteger(sessionVersion) ||
-    sessionVersion < 1
-  ) {
+  if (!Number.isInteger(sessionVersion) || sessionVersion < 1) {
     throw new Error("Invalid session version");
   }
 
   const now = Math.floor(Date.now() / 1000);
-
   const payload: Session = {
     ...input,
     sessionVersion,
@@ -188,30 +151,19 @@ export async function createSession(
   };
 
   const encrypted = await encrypt(payload);
-
   const signature = await crypto.subtle.sign(
     "HMAC",
     await getSigningKey(),
     new TextEncoder().encode(encrypted),
   );
 
-  return `${encrypted}.${toBase64Url(
-    new Uint8Array(signature),
-  )}`;
+  return `${encrypted}.${toBase64Url(new Uint8Array(signature))}`;
 }
 
-export async function verifySession(
-  token: string | undefined,
-): Promise<Session | null> {
-  if (!token) {
-    return null;
-  }
-
+export async function verifySession(token: string | undefined): Promise<Session | null> {
+  if (!token) return null;
   const parts = token.split(".");
-
-  if (parts.length !== 3) {
-    return null;
-  }
+  if (parts.length !== 3) return null;
 
   const encrypted = `${parts[0]}.${parts[1]}`;
 
@@ -223,24 +175,14 @@ export async function verifySession(
       new TextEncoder().encode(encrypted),
     );
 
-    if (!valid) {
-      return null;
-    }
+    if (!valid) return null;
 
     const payload = await decrypt(encrypted);
-
-    if (
-      !payload?.sub ||
-      !payload.exp ||
-      payload.exp <= Math.floor(Date.now() / 1000)
-    ) {
+    if (!payload?.sub || !payload.exp || payload.exp <= Math.floor(Date.now() / 1000)) {
       return null;
     }
 
-    if (
-      !Number.isInteger(payload.sessionVersion) ||
-      payload.sessionVersion < 1
-    ) {
+    if (!Number.isInteger(payload.sessionVersion) || payload.sessionVersion < 1) {
       return null;
     }
 
@@ -250,12 +192,31 @@ export async function verifySession(
   }
 }
 
-export async function getSessionFromRequest(
-  req: NextRequest,
-) {
-  return verifySession(
-    req.cookies.get(SESSION_COOKIE)?.value,
-  );
+/**
+ * Reads the signed cookie and re-validates the account against Supabase.
+ * This is the default request-level authentication helper used by protected APIs.
+ */
+export async function getSessionFromRequest(req: NextRequest): Promise<Session | null> {
+  const session = await verifySession(req.cookies.get(SESSION_COOKIE)?.value);
+  if (!session) return null;
+
+  try {
+    const { data: user, error } = await getDb()
+      .from("users")
+      .select("id,medisync_id,email,name,role,organization_id,status,session_version")
+      .eq("id", session.sub)
+      .maybeSingle();
+
+    if (error || !user || user.status !== "ACTIVE") return null;
+
+    if (ROLE_MAP[user.role as DbUser["role"]] !== session.role) return null;
+    if (Number(user.session_version) !== session.sessionVersion) return null;
+    if ((user.organization_id ?? undefined) !== session.organizationId) return null;
+
+    return session;
+  } catch {
+    return null;
+  }
 }
 
 export async function requireLiveSession(
@@ -272,76 +233,26 @@ export async function requireLiveSession(
     };
   }
 
+  if (allowedRoles && !allowedRoles.includes(session.role)) {
+    return {
+      ok: false as const,
+      status: 403,
+      error: "Forbidden",
+    };
+  }
+
   try {
     const { data: user, error } = await getDb()
       .from("users")
-      .select(
-        "id,medisync_id,email,name,role,organization_id,status,session_version",
-      )
+      .select("id,medisync_id,email,name,role,organization_id,status,session_version")
       .eq("id", session.sub)
       .maybeSingle();
 
-    if (error) {
-      throw error;
+    if (error || !user || user.status !== "ACTIVE") {
+      return { ok: false as const, status: 401, error: "Session is no longer valid" };
     }
 
-    if (!user || user.status !== "ACTIVE") {
-      return {
-        ok: false as const,
-        status: 401,
-        error: "Session is no longer valid",
-      };
-    }
-
-    if (
-      ROLE_MAP[user.role as DbUser["role"]] !==
-      session.role
-    ) {
-      return {
-        ok: false as const,
-        status: 401,
-        error: "Session is no longer valid",
-      };
-    }
-
-    if (
-      Number(user.session_version) !==
-      session.sessionVersion
-    ) {
-      return {
-        ok: false as const,
-        status: 401,
-        error: "Session is no longer valid",
-      };
-    }
-
-    if (
-      (user.organization_id ?? undefined) !==
-      session.organizationId
-    ) {
-      return {
-        ok: false as const,
-        status: 401,
-        error: "Session is no longer valid",
-      };
-    }
-
-    if (
-      allowedRoles &&
-      !allowedRoles.includes(session.role)
-    ) {
-      return {
-        ok: false as const,
-        status: 403,
-        error: "Forbidden",
-      };
-    }
-
-    return {
-      ok: true as const,
-      session,
-      user,
-    };
+    return { ok: true as const, session, user };
   } catch {
     return {
       ok: false as const,
@@ -362,40 +273,21 @@ export function dashboardForRole(role: UserRole) {
   return ROLE_DASHBOARDS[role];
 }
 
-export function hasRole(
-  session: Session | null,
-  allowedRoles: readonly UserRole[],
-) {
+export function hasRole(session: Session | null, allowedRoles: readonly UserRole[]) {
   return !!session && allowedRoles.includes(session.role);
 }
 
-export function verifyResourceOwnership(
-  session: Session,
-  resourceOwnerId: string,
-) {
-  if (
-    session.role === "admin" ||
-    session.role === "specialist"
-  ) {
-    return true;
-  }
+export function verifyResourceOwnership(session: Session, resourceOwnerId: string) {
+  if (session.role === "admin" || session.role === "specialist") return true;
 
-  if (session.role === "patient") {
-    return session.patientId === resourceOwnerId;
-  }
+  if (session.role === "patient") return session.patientId === resourceOwnerId;
 
   if (session.role === "hospital") {
-    return (
-      session.hospitalId === resourceOwnerId ||
-      session.organizationId === resourceOwnerId
-    );
+    return session.hospitalId === resourceOwnerId || session.organizationId === resourceOwnerId;
   }
 
   if (session.role === "insurance_agent") {
-    return (
-      session.insuranceAgentId === resourceOwnerId ||
-      session.organizationId === resourceOwnerId
-    );
+    return session.insuranceAgentId === resourceOwnerId || session.organizationId === resourceOwnerId;
   }
 
   return false;
