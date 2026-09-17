@@ -11,78 +11,19 @@ const CONFIG = {
   insurance: { label: "Insurance", title: "Create your Insurance account", fields: [{ key: "agencyName", label: "Agency name", type: "text", placeholder: "Enter agency name" }, { key: "agencyId", label: "Agency ID", type: "text", placeholder: "Enter agency ID" }] },
   admin: { label: "Admin", title: "Create your Admin account", fields: [{ key: "name", label: "Full name", type: "text", placeholder: "Enter your full name" }, { key: "adminId", label: "Admin ID", type: "text", placeholder: "Enter admin ID" }] },
 } as const;
-
 type RoleKey = keyof typeof CONFIG;
 
-export default function RoleRegistrationPage() {
-  const params = useParams<{ role: string }>();
-  const router = useRouter();
-  const role = (params.role || "").toLowerCase() as RoleKey;
-  const config = CONFIG[role];
-  const [details, setDetails] = useState<Record<string, string>>({});
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [otp, setOtp] = useState("");
-  const [step, setStep] = useState<1 | 2>(1);
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+function EyeIcon({ open }: { open: boolean }) { return open ? <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.5"/></svg> : <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m3 3 18 18"/><path d="M10.6 6.2A9.8 9.8 0 0 1 12 6c6 0 9.5 6 9.5 6a17.7 17.7 0 0 1-3.1 3.8M6.1 6.1C3.8 7.7 2.5 12 2.5 12S6 18 12 18a9.7 9.7 0 0 0 3.1-.5"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>; }
 
+export default function RoleRegistrationPage() {
+  const params = useParams<{ role: string }>(); const router = useRouter();
+  const role = (params.role || "").toLowerCase() as RoleKey; const config = CONFIG[role];
+  const [details, setDetails] = useState<Record<string, string>>({}); const [email, setEmail] = useState(""); const [password, setPassword] = useState(""); const [showPassword, setShowPassword] = useState(false); const [otp, setOtp] = useState(""); const [step, setStep] = useState<1 | 2>(1); const [error, setError] = useState(""); const [loading, setLoading] = useState(false);
   const validRole = useMemo(() => Boolean(config), [config]);
   if (!validRole) return <main className="min-h-screen p-10 text-center">Invalid portal. <Link href="/login" className="font-bold text-[var(--care)]">Back to portals</Link></main>;
-
-  async function startRegistration(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setError(""); setLoading(true);
-    try {
-      const response = await fetch("/api/auth/register-role", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ role: role.toUpperCase(), email, password, details }) });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data?.error || "Unable to start registration");
-      setStep(2);
-    } catch (err) { setError(err instanceof Error ? err.message : "Unable to start registration"); }
-    finally { setLoading(false); }
-  }
-
-  async function verify(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setError(""); setLoading(true);
-    try {
-      const response = await fetch("/api/auth/verify-role-registration", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, otp }) });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data?.error || "Unable to verify account");
-      router.replace(data.redirectTo || "/login"); router.refresh();
-    } catch (err) { setError(err instanceof Error ? err.message : "Unable to verify account"); }
-    finally { setLoading(false); }
-  }
-
-  async function resend() {
-    setError("");
-    try { await fetch("/api/auth/resend-registration-otp", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }) }); }
-    catch { setError("Unable to resend the verification code."); }
-  }
-
-  return (
-    <main className="mesh-bg relative min-h-screen overflow-hidden px-5 py-6 text-[var(--ink)] md:px-8 md:py-8">
-      <div className="mesh-orb-delay absolute -right-24 bottom-0 h-96 w-96 rounded-full bg-[#758FB5]/20 blur-3xl" />
-      <nav className="relative z-10 mx-auto flex max-w-7xl items-center justify-between"><Link href="/login" className="flex items-center gap-3"><Image src="/medisync-mark.svg" alt="MediSync" width={44} height={44} className="rounded-2xl shadow-lg" /><div><p className="font-display text-lg font-extrabold">MediSync</p><p className="text-[9px] font-bold uppercase tracking-[.2em] text-[var(--muted)]">Care OS</p></div></Link><Link href="/login" className="text-sm font-bold text-[var(--care)]">Sign in →</Link></nav>
-      <section className="relative z-10 mx-auto flex min-h-[calc(100vh-90px)] max-w-2xl items-center py-10">
-        <div className="glass w-full rounded-[34px] p-2 shadow-[0_28px_90px_rgba(18,22,29,.14)]"><div className="rounded-[28px] bg-white p-7 sm:p-10">
-          {step === 1 ? <form onSubmit={startRegistration}>
-            <p className="text-xs font-bold uppercase tracking-[.18em] text-[var(--care)]">{config.label} portal</p>
-            <h1 className="mt-3 font-display text-3xl font-extrabold tracking-tight">{config.title}</h1>
-            <p className="mt-3 text-sm leading-6 text-[var(--muted)]">Enter the details for your {config.label.toLowerCase()} workspace. We will verify your email before activating the account.</p>
-            <div className="mt-7 space-y-4">{config.fields.map((field) => <label key={field.key} className="block text-sm font-bold">{field.label}<input required type={field.type} placeholder={field.placeholder} value={details[field.key] || ""} onChange={(e) => setDetails((current) => ({ ...current, [field.key]: e.target.value }))} className="mt-2 w-full rounded-2xl border border-black/10 bg-[#FAFAFA] px-4 py-3 outline-none focus:border-[var(--care)]" /></label>)}</div>
-            <label className="mt-4 block text-sm font-bold">Email<input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" className="mt-2 w-full rounded-2xl border border-black/10 bg-[#FAFAFA] px-4 py-3 outline-none focus:border-[var(--care)]" /></label>
-            <label className="mt-4 block text-sm font-bold">Password<input required type="password" minLength={10} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" className="mt-2 w-full rounded-2xl border border-black/10 bg-[#FAFAFA] px-4 py-3 outline-none focus:border-[var(--care)]" /><span className="mt-2 block text-xs font-normal text-[var(--muted)]">10+ characters with uppercase, lowercase, and a number.</span></label>
-            {error && <ErrorBox>{error}</ErrorBox>}
-            <button disabled={loading} className="mt-6 flex w-full items-center justify-between rounded-2xl bg-[var(--ink)] px-5 py-4 text-sm font-bold text-white disabled:opacity-60"><span>{loading ? "Sending verification code…" : `Continue as ${config.label}`}</span><span>→</span></button>
-          </form> : <form onSubmit={verify}>
-            <p className="text-xs font-bold uppercase tracking-[.18em] text-[var(--care)]">Email verification</p><h1 className="mt-3 font-display text-3xl font-extrabold tracking-tight">Verify your account.</h1><p className="mt-3 text-sm leading-6 text-[var(--muted)]">Enter the 6-digit code sent to <strong className="text-[var(--ink)]">{email}</strong>.</p>
-            <label className="mt-8 block text-sm font-bold">Verification code<input required inputMode="numeric" maxLength={6} value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="000000" className="mt-2 w-full rounded-2xl border border-black/10 bg-[#FAFAFA] px-4 py-4 text-center text-2xl font-extrabold tracking-[.45em] outline-none focus:border-[var(--care)]" /></label>
-            {error && <ErrorBox>{error}</ErrorBox>}<button disabled={loading || otp.length !== 6} className="mt-6 flex w-full items-center justify-between rounded-2xl bg-[var(--ink)] px-5 py-4 text-sm font-bold text-white disabled:opacity-45"><span>{loading ? "Verifying…" : "Verify & enter portal"}</span><span>→</span></button>
-            <button type="button" onClick={resend} className="mt-5 w-full text-center text-xs font-bold text-[var(--care)]">Resend verification code</button>
-          </form>}
-        </div></div>
-      </section>
-    </main>
-  );
+  async function startRegistration(event: FormEvent<HTMLFormElement>) { event.preventDefault(); setError(""); setLoading(true); try { const response = await fetch("/api/auth/register-role", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ role: role.toUpperCase(), email, password, details }) }); const data = await response.json(); if (!response.ok) throw new Error(data?.error || "Unable to start registration"); setStep(2); } catch (err) { setError(err instanceof Error ? err.message : "Unable to start registration"); } finally { setLoading(false); } }
+  async function verify(event: FormEvent<HTMLFormElement>) { event.preventDefault(); setError(""); setLoading(true); try { const response = await fetch("/api/auth/verify-role-registration", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, otp }) }); const data = await response.json(); if (!response.ok) throw new Error(data?.error || "Unable to verify account"); router.replace(data.redirectTo || "/login"); router.refresh(); } catch (err) { setError(err instanceof Error ? err.message : "Unable to verify account"); } finally { setLoading(false); } }
+  async function resend() { setError(""); try { await fetch("/api/auth/resend-registration-otp", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }) }); } catch { setError("Unable to resend the verification code."); } }
+  return <main className="mesh-bg relative min-h-screen overflow-hidden px-5 py-6 text-[var(--ink)] md:px-8 md:py-8"><div className="mesh-orb-delay absolute -right-24 bottom-0 h-96 w-96 rounded-full bg-[#758FB5]/20 blur-3xl"/><nav className="relative z-10 mx-auto flex max-w-7xl items-center justify-between"><Link href="/login" className="flex items-center gap-3"><Image src="/medisync-mark.svg" alt="MediSync" width={44} height={44} className="rounded-2xl shadow-lg"/><div><p className="font-display text-lg font-extrabold">MediSync</p><p className="text-[9px] font-bold uppercase tracking-[.2em] text-[var(--muted)]">Care OS</p></div></Link><Link href="/login" className="text-sm font-bold text-[var(--care)]">Sign in →</Link></nav><section className="relative z-10 mx-auto flex min-h-[calc(100vh-90px)] max-w-2xl items-center py-10"><div className="glass w-full rounded-[34px] p-2 shadow-[0_28px_90px_rgba(18,22,29,.14)]"><div className="rounded-[28px] bg-white p-7 sm:p-10">{step === 1 ? <form onSubmit={startRegistration}><p className="text-xs font-bold uppercase tracking-[.18em] text-[var(--care)]">{config.label} portal</p><h1 className="mt-3 font-display text-3xl font-extrabold tracking-tight">{config.title}</h1><p className="mt-3 text-sm leading-6 text-[var(--muted)]">Enter the details for your {config.label.toLowerCase()} workspace. We will verify your email before activating the account.</p><div className="mt-7 space-y-4">{config.fields.map((field) => <label key={field.key} className="block text-sm font-bold">{field.label}<input required type={field.type} placeholder={field.placeholder} value={details[field.key] || ""} onChange={(e) => setDetails((current) => ({ ...current, [field.key]: e.target.value }))} className="mt-2 w-full rounded-2xl border border-black/10 bg-[#FAFAFA] px-4 py-3 outline-none focus:border-[var(--care)]"/></label>)}</div><label className="mt-4 block text-sm font-bold">Email<input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" className="mt-2 w-full rounded-2xl border border-black/10 bg-[#FAFAFA] px-4 py-3 outline-none focus:border-[var(--care)]"/></label><label className="mt-4 block text-sm font-bold">Password<div className="relative mt-2"><input required type={showPassword ? "text" : "password"} minLength={10} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" className="w-full rounded-2xl border border-black/10 bg-[#FAFAFA] px-4 py-3 pr-14 outline-none focus:border-[var(--care)]"/><button type="button" title={showPassword ? "Hide password" : "Show password"} aria-label={showPassword ? "Hide password" : "Show password"} onClick={() => setShowPassword((visible) => !visible)} className="absolute right-2 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-xl text-[var(--muted-strong)] hover:bg-black/5 focus:outline-none focus:ring-2 focus:ring-[var(--care)]/30"><EyeIcon open={showPassword}/></button></div><span className="mt-2 block text-xs font-normal text-[var(--muted)]">10+ characters with uppercase, lowercase, and a number.</span></label>{error && <ErrorBox>{error}</ErrorBox>}<button disabled={loading} className="mt-6 flex w-full items-center justify-between rounded-2xl bg-[var(--ink)] px-5 py-4 text-sm font-bold text-white disabled:opacity-60"><span>{loading ? "Sending verification code…" : `Continue as ${config.label}`}</span><span>→</span></button></form> : <form onSubmit={verify}><p className="text-xs font-bold uppercase tracking-[.18em] text-[var(--care)]">Email verification</p><h1 className="mt-3 font-display text-3xl font-extrabold tracking-tight">Verify your account.</h1><p className="mt-3 text-sm leading-6 text-[var(--muted)]">Enter the 6-digit code sent to <strong className="text-[var(--ink)]">{email}</strong>.</p><label className="mt-8 block text-sm font-bold">Verification code<input required inputMode="numeric" maxLength={6} value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="000000" className="mt-2 w-full rounded-2xl border border-black/10 bg-[#FAFAFA] px-4 py-4 text-center text-2xl font-extrabold tracking-[.45em] outline-none focus:border-[var(--care)]"/></label>{error && <ErrorBox>{error}</ErrorBox>}<button disabled={loading || otp.length !== 6} className="mt-6 flex w-full items-center justify-between rounded-2xl bg-[var(--ink)] px-5 py-4 text-sm font-bold text-white disabled:opacity-45"><span>{loading ? "Verifying…" : "Verify & enter portal"}</span><span>→</span></button><button type="button" onClick={resend} className="mt-5 w-full text-center text-xs font-bold text-[var(--care)]">Resend verification code</button></form>}</div></div></section></main>;
 }
-
 function ErrorBox({ children }: { children: string }) { return <div className="mt-4 rounded-2xl bg-[var(--danger-soft)] px-4 py-3 text-xs font-semibold leading-5 text-[var(--danger)]">{children}</div>; }
