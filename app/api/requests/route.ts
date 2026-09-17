@@ -6,21 +6,42 @@ const WORKBENCH_WEBHOOK_URL = process.env.SNS_WORKBENCH_WEBHOOK_URL;
 const WORKBENCH_WEBHOOK_SECRET = process.env.MEDISYNC_WEBHOOK_SECRET;
 
 async function triggerWorkflow(record: Awaited<ReturnType<typeof createRequest>>) {
-  if (!WORKBENCH_WEBHOOK_URL || !WORKBENCH_WEBHOOK_SECRET) return { triggered: false, reason: "Workflow webhook is not configured" };
+  if (!WORKBENCH_WEBHOOK_URL) {
+    return { triggered: false, reason: "Workflow webhook is not configured" };
+  }
+
   const response = await fetch(WORKBENCH_WEBHOOK_URL, {
     method: "POST",
-    headers: { "Content-Type": "application/json", "X-MediSync-Webhook-Secret": WORKBENCH_WEBHOOK_SECRET },
+    headers: {
+      "Content-Type": "application/json",
+      ...(WORKBENCH_WEBHOOK_SECRET
+        ? { "X-MediSync-Webhook-Secret": WORKBENCH_WEBHOOK_SECRET }
+        : {}),
+    },
     body: JSON.stringify({
-      stage: "request_creation",
       request_id: record.request_id,
-      payload: { patient_id: record.patient_id, request: record.request, request_source: record.request_source, document_uploaded: record.document_uploaded },
+      user_id: record.patient_id,
+      role: "PATIENT",
+      request_type: "GENERAL",
+      source: "medisync_patient_portal",
+      stage: "INITIAL",
+      payload: {
+        patient_id: record.patient_id,
+        request: record.request,
+        request_source: record.request_source,
+        document_uploaded: record.document_uploaded,
+      },
     }),
     cache: "no-store",
   });
+
   if (!response.ok) {
     const detail = await response.text().catch(() => "");
-    throw new Error(`SNS Workbench webhook failed (${response.status})${detail ? `: ${detail.slice(0, 300)}` : ""}`);
+    throw new Error(
+      `SNS Workbench webhook failed (${response.status})${detail ? `: ${detail.slice(0, 300)}` : ""}`,
+    );
   }
+
   return { triggered: true };
 }
 
