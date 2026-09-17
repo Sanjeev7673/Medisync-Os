@@ -27,16 +27,22 @@ function EyeIcon({ open }: { open: boolean }) {
   return open ? <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.5"/></svg> : <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m3 3 18 18"/><path d="M10.6 6.2A9.8 9.8 0 0 1 12 6c6 0 9.5 6 9.5 6a17.7 17.7 0 0 1-3.1 3.8M6.1 6.1C3.8 7.7 2.5 12 2.5 12S6 18 12 18a9.7 9.7 0 0 0 3.1-.5"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>;
 }
 
+function GoogleIcon() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5"><path fill="#4285F4" d="M21.35 12.23c0-.72-.06-1.42-.18-2.09H12v3.96h5.24a4.48 4.48 0 0 1-1.94 2.94v2.45h3.14c1.84-1.7 2.91-4.2 2.91-7.26Z"/><path fill="#34A853" d="M12 21.5c2.63 0 4.84-.87 6.45-2.36l-3.14-2.45c-.87.58-1.98.92-3.31.92-2.54 0-4.7-1.72-5.47-4.03H3.28v2.53A9.74 9.74 0 0 0 12 21.5Z"/><path fill="#FBBC05" d="M6.53 13.58A5.85 5.85 0 0 1 6.22 12c0-.55.11-1.09.31-1.58V7.89H3.28A9.5 9.5 0 0 0 2.5 12c0 1.48.35 2.88.78 4.11l3.25-2.53Z"/><path fill="#EA4335" d="M12 6.39c1.43 0 2.72.49 3.73 1.45l2.8-2.8C16.84 3.43 14.63 2.5 12 2.5a9.74 9.74 0 0 0-8.72 5.39l3.25 2.53C7.3 8.11 9.46 6.39 12 6.39Z"/></svg>;
+}
+
 export default function RoleLogin({ role }: { role: LoginRole }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const returnTo = searchParams.get("returnTo");
+  const googleError = searchParams.get("googleError");
   const config = ROLE_CONFIG[role];
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState(googleError || "");
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setError(""); setLoading(true);
@@ -48,6 +54,16 @@ export default function RoleLogin({ role }: { role: LoginRole }) {
       router.replace(destination); router.refresh();
     } catch (err) { setError(err instanceof Error ? err.message : "Unable to sign in"); }
     finally { setLoading(false); }
+  }
+
+  async function signInWithGoogle() {
+    setError(""); setGoogleLoading(true);
+    try {
+      const response = await fetch("/api/auth/google/start", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ role, mode: "signin" }) });
+      const data = await response.json();
+      if (!response.ok || !data?.url) throw new Error(data?.error || "Google authentication is unavailable");
+      window.location.assign(data.url);
+    } catch (err) { setError(err instanceof Error ? err.message : "Unable to start Google authentication"); setGoogleLoading(false); }
   }
 
   const forgotPassword = () => window.location.assign(`/forgot-password?role=${role}`);
@@ -65,11 +81,13 @@ export default function RoleLogin({ role }: { role: LoginRole }) {
         <div className="reveal hidden lg:block"><p className="mb-5 inline-flex rounded-full border border-black/5 bg-white/60 px-4 py-2 text-xs font-bold uppercase tracking-[.16em] text-[var(--care)] backdrop-blur">{config.eyebrow}</p><h1 className="max-w-2xl font-display text-6xl font-extrabold leading-[.98] tracking-[-.045em] xl:text-7xl">{config.title}</h1><p className="mt-7 max-w-xl text-lg leading-8 text-[var(--muted-strong)]">{config.description}</p><div className="mt-8 inline-flex rounded-2xl bg-white/65 px-4 py-3 text-xs font-bold text-[var(--care)] backdrop-blur">{config.accent} · Verified role-based access</div><HealthcareMotion /></div>
         <div className="reveal reveal-delay-1 mx-auto w-full max-w-xl"><div className="glass rounded-[34px] p-2 shadow-[0_28px_90px_rgba(18,22,29,.14)]"><form onSubmit={submit} className="rounded-[28px] bg-white p-7 sm:p-9">
           <div className="mb-7"><p className="text-xs font-bold uppercase tracking-[.18em] text-[var(--care)]">{config.label}</p><h2 className="mt-3 font-display text-3xl font-extrabold tracking-tight">Sign in securely.</h2><p className="mt-3 text-sm leading-6 text-[var(--muted)]">This portal only accepts accounts assigned to the {config.label.replace(" Portal", "").toLowerCase()} workspace.</p></div>
+          <button type="button" onClick={signInWithGoogle} disabled={googleLoading || loading} className="flex w-full items-center justify-center gap-3 rounded-2xl border border-black/10 bg-white px-5 py-3.5 text-sm font-bold text-[var(--ink)] shadow-sm transition hover:-translate-y-0.5 hover:bg-[#FAFAFA] disabled:cursor-not-allowed disabled:opacity-60"><GoogleIcon /><span>{googleLoading ? "Connecting to Google…" : "Continue with Google"}</span></button>
+          <div className="my-5 flex items-center gap-3"><span className="h-px flex-1 bg-black/10"/><span className="text-[10px] font-bold uppercase tracking-[.18em] text-[var(--muted)]">or email</span><span className="h-px flex-1 bg-black/10"/></div>
           <label className="block text-sm font-bold">Email<input required type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} className="mt-2 w-full rounded-2xl border border-black/10 bg-[#FAFAFA] px-4 py-3 outline-none transition focus:border-[var(--care)]" /></label>
           <label className="mt-4 block text-sm font-bold">Password<div className="relative mt-2"><input required type={showPassword ? "text" : "password"} autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full rounded-2xl border border-black/10 bg-[#FAFAFA] px-4 py-3 pr-14 outline-none transition focus:border-[var(--care)]" /><button type="button" aria-label={showPassword ? "Hide password" : "Show password"} title={showPassword ? "Hide password" : "Show password"} onClick={() => setShowPassword((visible) => !visible)} className="absolute right-2 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-xl text-[var(--muted-strong)] transition hover:bg-black/5 hover:text-[var(--ink)] focus:outline-none focus:ring-2 focus:ring-[var(--care)]/30"><EyeIcon open={showPassword} /></button></div></label>
           <button type="button" onClick={forgotPassword} className="mt-3 block w-full cursor-pointer text-right text-sm font-bold text-[var(--care)] hover:underline">Forgot password? <span className="font-semibold">Get OTP by email</span></button>
           {error && <div className="mt-4 rounded-2xl bg-[var(--danger-soft)] px-4 py-3 text-xs font-semibold leading-5 text-[var(--danger)]">{error}</div>}
-          <button disabled={loading} className="group mt-5 flex w-full items-center justify-between rounded-2xl bg-[var(--ink)] px-5 py-4 text-sm font-bold text-white shadow-xl transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"><span>{loading ? "Signing in…" : `Continue to ${config.label.replace(" Portal", "")}`}</span><span>→</span></button>
+          <button disabled={loading || googleLoading} className="group mt-5 flex w-full items-center justify-between rounded-2xl bg-[var(--ink)] px-5 py-4 text-sm font-bold text-white shadow-xl transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"><span>{loading ? "Signing in…" : `Continue to ${config.label.replace(" Portal", "")}`}</span><span>→</span></button>
           {role === "patient" && <p className="mt-5 text-center text-sm text-[var(--muted)]">New to MediSync? <Link href="/register" className="font-bold text-[var(--care)] hover:underline">Create a patient account</Link></p>}
           <div className="mt-6 rounded-2xl bg-[var(--care-soft)]/65 p-4"><p className="text-xs leading-5 text-[var(--muted-strong)]"><strong>Secure by design.</strong> Your role is verified server-side. A hospital, insurance or admin account cannot enter another role's portal through a browser-selected role.</p></div>
         </form></div></div>
