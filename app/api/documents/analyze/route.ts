@@ -132,8 +132,6 @@ function buildOcrText(data: { pages?: unknown[] }) {
     let markdown = page.markdown ?? page.text ?? "";
     const tables = Array.isArray(page.tables) ? page.tables : [];
 
-    // Mistral leaves table placeholders in page.markdown while the actual
-    // table payload is returned separately in page.tables. Expand both.
     for (const table of tables) {
       const id = table.id?.trim();
       const content = table.content ?? table.markdown ?? table.html ?? "";
@@ -230,9 +228,6 @@ async function analyzeWithGeminiWithRetry(file: File, apiKey: string, extractedT
 }
 
 async function analyzeWithGroq(file: File, apiKey: string, extractedText?: string) {
-  // PDF reports already have complete OCR text from Mistral, so use Groq's
-  // production text model for that path. Image uploads need a vision model.
-  // The model can still be overridden with GROQ_MODEL in Vercel.
   const model = process.env.GROQ_MODEL || (extractedText ? "openai/gpt-oss-120b" : "qwen/qwen3.8-27b");
   const content: Array<Record<string, unknown>> = [
     {
@@ -251,6 +246,10 @@ async function analyzeWithGroq(file: File, apiKey: string, extractedText?: strin
     });
   }
 
+  // Groq uses different reasoning_effort values for GPT-OSS and Qwen.
+  // GPT-OSS requires low/medium/high; Qwen 3.6/3.8 accepts none/default.
+  const reasoningEffort = model.startsWith("openai/gpt-oss-") ? "low" : "none";
+
   const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -262,7 +261,7 @@ async function analyzeWithGroq(file: File, apiKey: string, extractedText?: strin
       messages: [{ role: "user", content }],
       response_format: { type: "json_object" },
       temperature: 0.1,
-      reasoning_effort: "none",
+      reasoning_effort: reasoningEffort,
       max_completion_tokens: 4096,
       stream: false,
     }),
