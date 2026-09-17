@@ -1,4 +1,4 @@
-import { createHash, createHmac, randomBytes } from "node:crypto";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
 export const GOOGLE_OAUTH_STATE_TTL_SECONDS = 10 * 60;
 
@@ -45,13 +45,14 @@ export function verifyGoogleOAuthState(value: string): GoogleOAuthState | null {
   const [payload, signature] = value.split(".");
   if (!payload || !signature) return null;
   const expected = sign(payload);
-  if (signature.length !== expected.length) return null;
-  if (!createHash("sha256").update(signature).digest("hex").localeCompare(createHash("sha256").update(expected).digest("hex"))) return null;
+  const providedBytes = Buffer.from(signature);
+  const expectedBytes = Buffer.from(expected);
+  if (providedBytes.length !== expectedBytes.length || !timingSafeEqual(providedBytes, expectedBytes)) return null;
   try {
     const state = JSON.parse(decode(payload)) as GoogleOAuthState;
     if (!state || !state.exp || state.exp < Math.floor(Date.now() / 1000)) return null;
-    if (!['patient', 'hospital', 'insurance_agent', 'admin'].includes(state.role)) return null;
-    if (!['signin', 'signup'].includes(state.mode)) return null;
+    if (!["patient", "hospital", "insurance_agent", "admin"].includes(state.role)) return null;
+    if (!["signin", "signup"].includes(state.mode)) return null;
     return state;
   } catch {
     return null;
