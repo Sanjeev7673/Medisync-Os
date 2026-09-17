@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import type { Part } from "@google/generative-ai";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -88,7 +89,7 @@ async function analyzeWithGemini(file: File, apiKey: string, extractedText?: str
   const genAI = new GoogleGenerativeAI(apiKey);
   const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
-  const parts: Array<Record<string, unknown>> = [{ text: REPORT_PROMPT }];
+  const parts: Part[] = [{ text: REPORT_PROMPT }];
 
   if (extractedText) {
     parts.push({
@@ -104,9 +105,11 @@ async function analyzeWithGemini(file: File, apiKey: string, extractedText?: str
     });
   }
 
-  const result = await model.generateContent({ contents: [{ role: "user", parts }] });
-  const html = stripCodeFence(result.response.text());
+  const result = await model.generateContent({
+    contents: [{ role: "user", parts }],
+  });
 
+  const html = stripCodeFence(result.response.text());
   if (!html) throw new Error("Gemini returned an empty report.");
   return html;
 }
