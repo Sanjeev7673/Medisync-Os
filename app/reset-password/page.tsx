@@ -4,82 +4,13 @@ import Link from "next/link";
 import { FormEvent, Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
+function EyeIcon({ open }: { open: boolean }) { return open ? <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.5"/></svg> : <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m3 3 18 18"/><path d="M10.6 6.2A9.8 9.8 0 0 1 12 6c6 0 9.5 6 9.5 6a17.7 17.7 0 0 1-3.1 3.8M6.1 6.1C3.8 7.7 2.5 12 2.5 12S6 18 12 18a9.7 9.7 0 0 0 3.1-.5"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>; }
+
 function ResetPasswordForm() {
-  const searchParams = useSearchParams();
-  const token = searchParams.get("token") ?? "";
-  const [password, setPassword] = useState("");
-  const [confirm, setConfirm] = useState("");
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setError("");
-    setMessage("");
-    if (password !== confirm) return setError("Passwords do not match.");
-    setLoading(true);
-    try {
-      const response = await fetch("/api/auth/reset-password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, password }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data?.error || "Unable to reset password");
-      setMessage(data.message);
-      setPassword("");
-      setConfirm("");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to reset password");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  return (
-    <>
-      {!token ? (
-        <div className="mt-7 rounded-2xl bg-[var(--danger-soft)] px-4 py-3 text-sm font-semibold text-[var(--danger)]">
-          This reset link is missing or invalid.
-        </div>
-      ) : (
-        <form onSubmit={submit} className="mt-7">
-          <label className="block text-sm font-bold">
-            New password
-            <input required minLength={10} type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} className="mt-2 w-full rounded-2xl border border-black/10 bg-[#FAFAFA] px-4 py-3 outline-none focus:border-[var(--care)]" />
-          </label>
-          <label className="mt-4 block text-sm font-bold">
-            Confirm password
-            <input required minLength={10} type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} className="mt-2 w-full rounded-2xl border border-black/10 bg-[#FAFAFA] px-4 py-3 outline-none focus:border-[var(--care)]" />
-          </label>
-          {error && <div className="mt-4 rounded-2xl bg-[var(--danger-soft)] px-4 py-3 text-xs font-semibold leading-5 text-[var(--danger)]">{error}</div>}
-          {message && <div className="mt-4 rounded-2xl bg-[var(--care-soft)] px-4 py-3 text-xs font-semibold leading-5 text-[var(--muted-strong)]">{message} <Link href="/login" className="font-bold text-[var(--care)] hover:underline">Sign in</Link></div>}
-          <button disabled={loading} className="mt-5 flex w-full items-center justify-between rounded-2xl bg-[var(--ink)] px-5 py-4 text-sm font-bold text-white shadow-xl disabled:opacity-60"><span>{loading ? "Updating…" : "Update password"}</span><span>→</span></button>
-        </form>
-      )}
-    </>
-  );
+  const searchParams = useSearchParams(); const token = searchParams.get("token") ?? "";
+  const [password, setPassword] = useState(""); const [confirm, setConfirm] = useState(""); const [showPassword, setShowPassword] = useState(false); const [showConfirm, setShowConfirm] = useState(false); const [message, setMessage] = useState(""); const [error, setError] = useState(""); const [loading, setLoading] = useState(false);
+  async function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); setError(""); setMessage(""); if (password !== confirm) return setError("Passwords do not match."); setLoading(true); try { const response = await fetch("/api/auth/reset-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token, password }) }); const data = await response.json(); if (!response.ok) throw new Error(data?.error || "Unable to reset password"); setMessage(data.message); setPassword(""); setConfirm(""); } catch (err) { setError(err instanceof Error ? err.message : "Unable to reset password"); } finally { setLoading(false); } }
+  return !token ? <div className="mt-7 rounded-2xl bg-[var(--danger-soft)] px-4 py-3 text-sm font-semibold text-[var(--danger)]">This reset link is missing or invalid.</div> : <form onSubmit={submit} className="mt-7"><label className="block text-sm font-bold">New password<div className="relative mt-2"><input required minLength={10} type={showPassword ? "text" : "password"} autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full rounded-2xl border border-black/10 bg-[#FAFAFA] px-4 py-3 pr-14 outline-none focus:border-[var(--care)]"/><button type="button" title={showPassword ? "Hide password" : "Show password"} aria-label={showPassword ? "Hide password" : "Show password"} onClick={() => setShowPassword((v) => !v)} className="absolute right-2 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-xl text-[var(--muted-strong)] hover:bg-black/5 focus:outline-none focus:ring-2 focus:ring-[var(--care)]/30"><EyeIcon open={showPassword}/></button></div></label><label className="mt-4 block text-sm font-bold">Confirm password<div className="relative mt-2"><input required minLength={10} type={showConfirm ? "text" : "password"} autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} className="w-full rounded-2xl border border-black/10 bg-[#FAFAFA] px-4 py-3 pr-14 outline-none focus:border-[var(--care)]"/><button type="button" title={showConfirm ? "Hide password" : "Show password"} aria-label={showConfirm ? "Hide password" : "Show password"} onClick={() => setShowConfirm((v) => !v)} className="absolute right-2 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-xl text-[var(--muted-strong)] hover:bg-black/5 focus:outline-none focus:ring-2 focus:ring-[var(--care)]/30"><EyeIcon open={showConfirm}/></button></div></label>{error && <div className="mt-4 rounded-2xl bg-[var(--danger-soft)] px-4 py-3 text-xs font-semibold leading-5 text-[var(--danger)]">{error}</div>}{message && <div className="mt-4 rounded-2xl bg-[var(--care-soft)] px-4 py-3 text-xs font-semibold leading-5 text-[var(--muted-strong)]">{message} <Link href="/login" className="font-bold text-[var(--care)] hover:underline">Sign in</Link></div>}<button disabled={loading} className="mt-5 flex w-full items-center justify-between rounded-2xl bg-[var(--ink)] px-5 py-4 text-sm font-bold text-white shadow-xl disabled:opacity-60"><span>{loading ? "Updating…" : "Update password"}</span><span>→</span></button></form>;
 }
 
-export default function ResetPasswordPage() {
-  return (
-    <main className="mesh-bg relative min-h-screen overflow-hidden px-5 py-8 text-[var(--ink)] md:px-8 md:py-10">
-      <div className="mesh-orb absolute -left-24 top-10 h-72 w-72 rounded-full bg-[#B9C5EC]/50 blur-3xl" />
-      <div className="mesh-orb-delay absolute -right-24 bottom-0 h-96 w-96 rounded-full bg-[#758FB5]/20 blur-3xl" />
-      <div className="relative z-10 mx-auto flex min-h-[85vh] max-w-xl items-center justify-center">
-        <div className="glass w-full rounded-[34px] p-2 shadow-[0_28px_90px_rgba(18,22,29,.14)]">
-          <div className="rounded-[28px] bg-white p-7 sm:p-9">
-            <Link href="/login" className="text-xs font-bold text-[var(--care)]">← Back to login</Link>
-            <p className="mt-8 text-xs font-bold uppercase tracking-[.18em] text-[var(--care)]">Secure account recovery</p>
-            <h1 className="mt-3 font-display text-4xl font-extrabold tracking-tight">Create a new password.</h1>
-            <p className="mt-3 text-sm leading-6 text-[var(--muted)]">Use at least 10 characters with uppercase, lowercase and a number.</p>
-            <Suspense fallback={<div className="mt-7 rounded-2xl bg-black/5 px-4 py-3 text-sm font-semibold">Loading reset link…</div>}>
-              <ResetPasswordForm />
-            </Suspense>
-          </div>
-        </div>
-      </div>
-    </main>
-  );
-}
+export default function ResetPasswordPage() { return <main className="mesh-bg relative min-h-screen overflow-hidden px-5 py-8 text-[var(--ink)] md:px-8 md:py-10"><div className="mesh-orb absolute -left-24 top-10 h-72 w-72 rounded-full bg-[#B9C5EC]/50 blur-3xl"/><div className="mesh-orb-delay absolute -right-24 bottom-0 h-96 w-96 rounded-full bg-[#758FB5]/20 blur-3xl"/><div className="relative z-10 mx-auto flex min-h-[85vh] max-w-xl items-center justify-center"><div className="glass w-full rounded-[34px] p-2 shadow-[0_28px_90px_rgba(18,22,29,.14)]"><div className="rounded-[28px] bg-white p-7 sm:p-9"><Link href="/login" className="text-xs font-bold text-[var(--care)]">← Back to login</Link><p className="mt-8 text-xs font-bold uppercase tracking-[.18em] text-[var(--care)]">Secure account recovery</p><h1 className="mt-3 font-display text-4xl font-extrabold tracking-tight">Create a new password.</h1><p className="mt-3 text-sm leading-6 text-[var(--muted)]">Use at least 10 characters with uppercase, lowercase and a number.</p><Suspense fallback={<div className="mt-7 rounded-2xl bg-black/5 px-4 py-3 text-sm font-semibold">Loading reset link…</div>}><ResetPasswordForm/></Suspense></div></div></div></main>; }
