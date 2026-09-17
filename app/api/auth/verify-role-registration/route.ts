@@ -6,6 +6,14 @@ import { hashOtp, OTP_MAX_ATTEMPTS } from "@/lib/registration-otp";
 const OTP_RE = /^\d{6}$/;
 const ROLES = ["PATIENT", "HOSPITAL", "INSURANCE", "ADMIN"] as const;
 type Role = (typeof ROLES)[number];
+type SessionRole = "patient" | "hospital" | "insurance_agent" | "admin";
+
+const SESSION_ROLE_MAP: Record<Role, SessionRole> = {
+  PATIENT: "patient",
+  HOSPITAL: "hospital",
+  INSURANCE: "insurance_agent",
+  ADMIN: "admin",
+};
 
 export async function POST(req: NextRequest) {
   try {
@@ -44,7 +52,7 @@ export async function POST(req: NextRequest) {
     }
     await db.from("pending_registrations").delete().eq("id", pending.id);
 
-    const sessionRole = role.toLowerCase() as "patient" | "hospital" | "insurance" | "admin";
+    const sessionRole = SESSION_ROLE_MAP[role];
     const session = await createSession({ sub: user.id, email: user.email, name: user.name, role: sessionRole, ...(role === "PATIENT" ? { patientId: user.id } : {}) });
     const response = NextResponse.json({ authenticated: true, user: { id: user.id, email: user.email, name: user.name, role }, redirectTo: dashboardForRole(sessionRole) }, { status: 201 });
     response.cookies.set(SESSION_COOKIE, session, sessionCookieOptions());
