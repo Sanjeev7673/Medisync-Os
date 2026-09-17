@@ -1,7 +1,6 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { ArrowRight, Eye, EyeOff, UserPlus } from "lucide-react";
 
@@ -27,6 +26,7 @@ export default function SignUpPage() {
   const [error, setError] = useState("");
   const selected = roles.find(r => r.key === role)!;
 
+  function go(path: string) { window.location.assign(path); }
   function changeRole(next: Role) { setRole(next); setDetails({}); setError(""); }
   function setDetail(label: string, value: string) { setDetails(d => ({ ...d, [label]: value })); }
 
@@ -44,7 +44,6 @@ export default function SignUpPage() {
       const res = await fetch("/api/auth/register-role", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Unable to create account");
-      setMessage(data.message || "OTP sent to your email. Check your inbox to verify your account.");
       sessionStorage.setItem("medisync_registration_email", email);
       sessionStorage.setItem("medisync_registration_role", role);
       window.location.assign(`/register/${role}`);
@@ -57,8 +56,8 @@ export default function SignUpPage() {
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_15%_15%,rgba(16,185,129,.14),transparent_30%),radial-gradient(circle_at_85%_85%,rgba(34,211,238,.12),transparent_30%)]" />
       <div className="pointer-events-none absolute inset-0 opacity-[.2] [background-image:linear-gradient(rgba(255,255,255,.035)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.035)_1px,transparent_1px)] [background-size:42px_42px]" />
       <header className="relative z-10 mx-auto flex max-w-7xl items-center justify-between px-6 py-6">
-        <Link href="/" className="flex items-center gap-3"><Image src="/medisync-mark.svg" alt="MediSync" width={40} height={40} className="rounded-xl" /><div><b className="font-display text-lg">MediSync</b><p className="text-[9px] uppercase tracking-[.25em] text-slate-500">Care OS</p></div></Link>
-        <Link href="/signin" className="rounded-full border border-white/10 bg-white/[.05] px-4 py-2.5 text-xs font-bold text-slate-300 hover:bg-white/10">Already have an account? Sign in</Link>
+        <button type="button" onClick={() => go("/")} className="flex items-center gap-3 text-left"><Image src="/medisync-mark.svg" alt="MediSync" width={40} height={40} className="rounded-xl" /><div><b className="font-display text-lg">MediSync</b><p className="text-[9px] uppercase tracking-[.25em] text-slate-500">Care OS</p></div></button>
+        <button type="button" onClick={() => go("/signin")} className="rounded-full border border-white/10 bg-white/[.05] px-4 py-2.5 text-xs font-bold text-slate-300 hover:bg-white/10">Sign in</button>
       </header>
       <section className="relative z-10 flex items-center justify-center px-5 pb-12 pt-5">
         <div className="w-full max-w-2xl rounded-[30px] border border-white/10 bg-white/[.045] p-2 shadow-[0_30px_100px_rgba(0,0,0,.5)] backdrop-blur-2xl">
@@ -72,7 +71,7 @@ export default function SignUpPage() {
               {error && <p className="rounded-xl border border-red-400/20 bg-red-400/10 px-3 py-2.5 text-xs text-red-300">{error}</p>}{message && <p className="rounded-xl border border-emerald-400/20 bg-emerald-400/10 px-3 py-2.5 text-xs text-emerald-300">{message}</p>}
               <button disabled={loading} className="group flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-400 to-cyan-400 px-4 py-3.5 text-sm font-extrabold text-[#071019] shadow-[0_10px_35px_rgba(34,211,238,.16)] hover:brightness-110 disabled:opacity-50">{loading ? "Creating account..." : "Create account"}<ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" /></button>
             </form>
-            <p className="mt-6 text-center text-xs text-slate-500">Already registered? <Link href="/signin" className="font-bold text-cyan-300">Sign in</Link></p>
+            <p className="mt-6 text-center text-xs text-slate-500">Already registered? <button type="button" onClick={() => go("/signin")} className="font-bold text-cyan-300">Sign in</button></p>
           </div>
         </div>
       </section>
