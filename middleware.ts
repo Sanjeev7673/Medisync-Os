@@ -17,10 +17,7 @@ export async function middleware(req: NextRequest) {
   const pathname = req.nextUrl.pathname;
 
   // SNS Workbench endpoints authenticate independently with their own webhook secret.
-  if (
-    pathname === "/api/webhooks/sns" ||
-    pathname === "/api/workbench/document-complete"
-  ) {
+  if (pathname === "/api/webhooks/sns" || pathname === "/api/workbench/document-complete") {
     return NextResponse.next();
   }
 
@@ -35,7 +32,6 @@ export async function middleware(req: NextRequest) {
     if (pathname.startsWith("/api/")) {
       return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     }
-
     const loginUrl = new URL("/login", req.url);
     loginUrl.searchParams.set("returnTo", pathname);
     return NextResponse.redirect(loginUrl);
@@ -70,6 +66,7 @@ export const config = {
     "/requests/:path*",
     "/documents/:path*",
     "/appointments/:path*",
+    "/profile/:path*",
     "/api/:path*",
   ],
 };
