@@ -10,7 +10,7 @@ const ALLOWED_TYPES = new Set(["application/pdf", "image/png", "image/jpeg", "im
 
 const REPORT_PROMPT = `You are MediSync Clinical Evidence Data Extractor.
 
-Extract ONLY medical evidence explicitly present in the supplied document or OCR text.
+Extract ONLY medical evidence explicitly present in the supplied document, image, or OCR text.
 
 CRITICAL SOURCE-GROUNDING RULES:
 - The source document is authoritative. Never invent, guess, normalize, or fill missing patient data or clinical values.
@@ -24,6 +24,10 @@ CRITICAL SOURCE-GROUNDING RULES:
 - confidence reflects extraction quality only, not clinical certainty.
 - requires_human_review must always be true.
 
+Return one JSON object with exactly these top-level fields:
+document_type, report_date, patient_name, patient_id, date_of_birth, sex, referring_unit, specimen, summary, findings, key_observations, supportive_findings, limitations_and_concerns, possible_associations, symptom_associations, red_flags, questions_for_clinician, priority, specialty_hint, workflow, confidence, requires_human_review.
+
+Each findings item must contain: item, value, unit, reference_range, status, evidence.
 Return JSON only. No markdown, no code fences, no HTML.`;
 
 const ANALYSIS_SCHEMA: any = {
@@ -73,6 +77,47 @@ const ANALYSIS_SCHEMA: any = {
     "questions_for_clinician", "priority", "specialty_hint", "workflow", "confidence", "requires_human_review",
   ],
 };
+
+const ANALYSIS_DEFAULTS: Record<string, unknown> = {
+  document_type: "Not provided",
+  report_date: "Not provided",
+  patient_name: "Not provided",
+  patient_id: "Not provided",
+  date_of_birth: "Not provided",
+  sex: "Not provided",
+  referring_unit: "Not provided",
+  specimen: "Not provided",
+  summary: "Not provided",
+  findings: [],
+  key_observations: [],
+  supportive_findings: [],
+  limitations_and_concerns: [],
+  possible_associations: [],
+  symptom_associations: [],
+  red_flags: [],
+  questions_for_clinician: [],
+  priority: "Not provided",
+  specialty_hint: "Not provided",
+  workflow: "Human review required",
+  confidence: 0,
+  requires_human_review: true,
+};
+
+function normalizeAnalysis(input: Record<string, unknown>) {
+  const output: Record<string, unknown> = { ...ANALYSIS_DEFAULTS, ...input };
+  const arrayFields = [
+    "findings", "key_observations", "supportive_findings", "limitations_and_concerns",
+    "possible_associations", "symptom_associations", "red_flags", "questions_for_clinician",
+  ];
+
+  for (const field of arrayFields) {
+    if (!Array.isArray(output[field])) output[field] = [];
+  }
+
+  output.requires_human_review = true;
+  if (typeof output.confidence !== "number" || !Number.isFinite(output.confidence)) output.confidence = 0;
+  return output;
+}
 
 function buildOcrText(data: { pages?: unknown[] }) {
   const pages = Array.isArray(data?.pages) ? data.pages : [];
@@ -153,9 +198,86 @@ async function analyzeWithGemini(file: File, apiKey: string, extractedText?: str
   if (!raw) throw new Error("Gemini returned an empty extraction.");
 
   try {
-    return JSON.parse(raw) as Record<string, unknown>;
+    return normalizeAnalysis(JSON.parse(raw) as Record<string, unknown>);
   } catch {
     throw new Error(`Gemini returned invalid structured data: ${raw.slice(0, 500)}`);
+  }
+}
+
+function isTransientGeminiError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /\b(429|500|502|503|504)\b|high demand|temporarily unavailable|service unavailable/i.test(message);
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function analyzeWithGeminiWithRetry(file: File, apiKey: string, extractedText?: string) {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      return await analyzeWithGemini(file, apiKey, extractedText);
+    } catch (error) {
+      lastError = error;
+      if (!isTransientGeminiError(error) || attempt === 1) break;
+      await sleep(900);
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error("Gemini analysis failed.");
+}
+
+async function analyzeWithGroq(file: File, apiKey: string, extractedText?: string) {
+  const content: Array<Record<string, unknown>> = [
+    {
+      type: "text",
+      text: extractedText
+        ? `${REPORT_PROMPT}\n\nCOMPLETE OCR SOURCE, INCLUDING EXPANDED TABLES:\n${extractedText}`
+        : REPORT_PROMPT,
+    },
+  ];
+
+  if (!extractedText) {
+    const bytes = Buffer.from(await file.arrayBuffer());
+    content.push({
+      type: "image_url",
+      image_url: { url: `data:${file.type};base64,${bytes.toString("base64")}` },
+    });
+  }
+
+  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "qwen/qwen3.6-27b",
+      messages: [{ role: "user", content }],
+      response_format: { type: "json_object" },
+      temperature: 0.1,
+      reasoning_effort: "none",
+      max_completion_tokens: 4096,
+      stream: false,
+    }),
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Groq fallback failed (${response.status}): ${text.slice(0, 500)}`);
+  }
+
+  const data = await response.json();
+  const raw = data?.choices?.[0]?.message?.content;
+  if (!raw) throw new Error("Groq returned an empty extraction.");
+
+  try {
+    return normalizeAnalysis(JSON.parse(raw) as Record<string, unknown>);
+  } catch {
+    throw new Error(`Groq returned invalid structured data: ${String(raw).slice(0, 500)}`);
   }
 }
 
@@ -172,6 +294,7 @@ export async function POST(req: NextRequest) {
 
     const mistralKey = process.env.MISTRAL_API_KEY;
     const geminiKey = process.env.GEMINI_API_KEY;
+    const groqKey = process.env.GROQ_API_KEY;
     if (!geminiKey) return NextResponse.json({ error: "GEMINI_API_KEY is not configured." }, { status: 500 });
 
     let extractedText: string | undefined;
@@ -184,7 +307,20 @@ export async function POST(req: NextRequest) {
       sourceType = "image";
     }
 
-    const analysis = await analyzeWithGemini(file, geminiKey, extractedText);
+    let analysis: Record<string, unknown>;
+    try {
+      analysis = await analyzeWithGeminiWithRetry(file, geminiKey, extractedText);
+    } catch (geminiError) {
+      console.warn("Gemini primary analysis failed:", geminiError);
+
+      if (!groqKey || !isTransientGeminiError(geminiError)) {
+        throw geminiError;
+      }
+
+      console.warn("Gemini transient failure detected. Switching to Groq fallback.");
+      analysis = await analyzeWithGroq(file, groqKey, extractedText);
+    }
+
     return NextResponse.json({
       success: true,
       sourceType,
