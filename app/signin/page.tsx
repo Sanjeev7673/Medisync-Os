@@ -8,17 +8,11 @@ import { ArrowRight, Building2, CircleUserRound, Eye, EyeOff, Hospital, KeyRound
 type Mode = "signin" | "signup";
 type Role = "PATIENT" | "HOSPITAL" | "INSURANCE" | "ADMIN";
 
-type AuthWebhookRequest = {
-  action: "AUTH";
-  role: Role;
-  email: string;
-};
-
-type AuthWebhookResponse = {
-  success: boolean;
-  message?: string;
-  user?: { email: string; role: Role };
-  token?: string;
+type SupabaseLoginResponse = {
+  authenticated?: boolean;
+  error?: string;
+  user?: { id: string; medisyncId: string; email: string; name: string; role: string };
+  redirectTo?: string;
 };
 
 const roles = [
@@ -68,36 +62,28 @@ export default function AuthPage() {
     }
 
     const normalizedEmail = email.trim().toLowerCase();
-    if (!normalizedEmail) {
-      setError("Please enter your email address.");
+    if (!normalizedEmail || !password) {
+      setError("Please enter your email address and password.");
       return;
     }
 
     setLoading(true);
     try {
-      const payload: AuthWebhookRequest = { action: "AUTH", role, email: normalizedEmail };
-      const response = await fetch("/api/auth/sns", {
+      const response = await fetch("/api/auth/supabase-login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ email: normalizedEmail, password, expectedRole: role.toLowerCase() }),
       });
 
-      const raw = await response.text();
-      let data: AuthWebhookResponse;
-      try {
-        data = JSON.parse(raw) as AuthWebhookResponse;
-      } catch {
-        const nested = raw.match(/\{[\s\S]*\}/)?.[0];
-        if (!nested) throw new Error("Invalid response from authentication service.");
-        data = JSON.parse(nested) as AuthWebhookResponse;
+      const data = (await response.json().catch(() => ({}))) as SupabaseLoginResponse;
+
+      if (!response.ok || !data.authenticated) {
+        throw new Error(data.error || "Authentication failed. Please check your email and password.");
       }
 
-      if (!response.ok || !data.success) throw new Error(data.message || "Authentication failed.");
-      if (!data.token) throw new Error("Authentication succeeded but no token was returned.");
-
-      localStorage.setItem("medisync_token", data.token);
       if (data.user) localStorage.setItem("medisync_user", JSON.stringify(data.user));
-      window.location.assign("/dashboard");
+      localStorage.removeItem("medisync_token");
+      window.location.assign(data.redirectTo || "/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Authentication failed. Please try again.");
     } finally {
