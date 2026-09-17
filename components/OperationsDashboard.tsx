@@ -7,6 +7,15 @@ import OperationsShell from "@/components/OperationsShell";
 
 type Role = "specialist" | "admin";
 type SessionUser = { email?: string; name?: string; role?: string; specialistId?: string };
+type AdminMetrics = {
+  users: number;
+  hospitals: number;
+  insuranceOrganizations: number;
+  specialists: number;
+  activeWorkflows: number;
+  pendingReviews: number;
+  failedWorkflows: number;
+};
 
 const config = {
   specialist: {
@@ -21,17 +30,19 @@ const config = {
   admin: {
     eyebrow: "Administration workspace",
     title: "Run healthcare administration from one control plane.",
-    description: "Coordinate patient records, provider credentials, insurance documentation, compliance exceptions and operational workflows with an auditable trail.",
-    primary: ["Review requests", "/admin/requests"],
-    metrics: ["Open requests", "Credential alerts", "Insurance cases", "Compliance alerts"],
+    description: "Coordinate operational records, provider credentials, insurance organizations and workflow exceptions with an auditable trail.",
+    primary: ["Review workflows", "/admin/requests"],
+    metrics: ["Users", "Hospitals", "Insurance organizations", "Specialists", "Active workflows", "Pending reviews", "Failed workflows"],
     steps: ["Data received", "Validation", "AI assistance", "Human review", "Audited outcome"],
-    guidance: ["Resolve missing or inconsistent information", "Review credential and insurance exceptions", "Keep sensitive decisions human-approved and auditable"],
+    guidance: ["Resolve missing or inconsistent operational information", "Review credential and organization exceptions", "Keep sensitive outcomes human-approved and auditable"],
   },
 } as const;
 
 export default function OperationsDashboard({ role }: { role: Role }) {
   const router = useRouter();
   const [user, setUser] = useState<SessionUser | null>(null);
+  const [metrics, setMetrics] = useState<AdminMetrics | null>(null);
+  const [metricsError, setMetricsError] = useState(false);
   const c = config[role];
 
   useEffect(() => {
@@ -49,9 +60,22 @@ export default function OperationsDashboard({ role }: { role: Role }) {
           return;
         }
         setUser(session);
+        if (role === "admin") {
+          fetch("/api/admin/overview")
+            .then((response) => {
+              if (!response.ok) throw new Error("metrics unavailable");
+              return response.json();
+            })
+            .then((data) => setMetrics(data.metrics ?? null))
+            .catch(() => setMetricsError(true));
+        }
       })
       .catch(() => router.replace("/login"));
   }, [role, router]);
+
+  const adminMetricValues = metrics
+    ? [metrics.users, metrics.hospitals, metrics.insuranceOrganizations, metrics.specialists, metrics.activeWorkflows, metrics.pendingReviews, metrics.failedWorkflows]
+    : [null, null, null, null, null, null, null];
 
   return (
     <OperationsShell role={role}>
@@ -65,10 +89,14 @@ export default function OperationsDashboard({ role }: { role: Role }) {
           <div className="mesh-orb absolute -right-16 -top-20 h-64 w-64 rounded-full bg-[#B9C5EC]/20 blur-3xl" />
           <div className="relative"><div className="flex flex-wrap items-center justify-between gap-3"><span className="rounded-full bg-white/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[.16em] text-white/75">Workflow control</span><span className="text-xs text-white/50">{role === "specialist" ? user?.name ?? "Authorized specialist" : "Authorized administrator"}</span></div><h2 className="mt-12 max-w-xl font-display text-3xl font-extrabold leading-tight tracking-[-.03em]">Every administrative handoff has a visible next step.</h2><div className="mt-8 grid gap-2 sm:grid-cols-5">{c.steps.map((step, index) => <div key={step} className="rounded-2xl border border-white/10 bg-white/[.06] p-3"><span className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${index === 0 ? "bg-[#B9C5EC] text-[var(--ink)]" : "bg-white/10 text-white/65"}`}>{index + 1}</span><p className="mt-3 text-[11px] font-semibold leading-4 text-white/70">{step}</p></div>)}</div></div>
         </div>
-        <div className="glass rounded-[30px] p-6 md:p-7"><p className="text-xs font-bold uppercase tracking-[.16em] text-[var(--muted)]">Workspace health</p><div className="mt-7 flex items-center gap-3"><span className="h-3 w-3 rounded-full bg-[var(--success)]" /><p className="text-sm font-bold">Session connected</p></div><p className="mt-3 text-xs leading-5 text-[var(--muted)]">Your role determines which operational records and actions are available in this workspace.</p></div>
+        <div className="glass rounded-[30px] p-6 md:p-7"><p className="text-xs font-bold uppercase tracking-[.16em] text-[var(--muted)]">Workspace health</p><div className="mt-7 flex items-center gap-3"><span className="h-3 w-3 rounded-full bg-[var(--success)]" /><p className="text-sm font-bold">Session connected</p></div><p className="mt-3 text-xs leading-5 text-[var(--muted)]">Role and server-side authorization determine which operational records and actions are available.</p></div>
       </section>
 
-      <section className="reveal reveal-delay-2 mt-8 grid grid-cols-2 gap-3 lg:grid-cols-4">{c.metrics.map((label) => <div key={label} className="glass rounded-2xl p-5"><p className="font-display text-3xl font-extrabold">—</p><p className="mt-1 text-xs font-semibold text-[var(--muted)]">{label}</p></div>)}</section>
+      {role === "admin" && <div className="mt-8 rounded-2xl border border-black/5 bg-white/60 px-4 py-3 text-xs text-[var(--muted)]"><span className="font-bold text-[var(--ink)]">Live database metrics.</span> Values below are loaded from MediSync Supabase data; no demo values are substituted. {metricsError ? "The metrics service is currently unavailable." : ""}</div>}
+
+      <section className="reveal reveal-delay-2 mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {c.metrics.map((label, index) => <div key={label} className="glass rounded-2xl p-5"><p className="font-display text-3xl font-extrabold">{role === "admin" ? (adminMetricValues[index] ?? "—") : "—"}</p><p className="mt-1 text-xs font-semibold text-[var(--muted)]">{label}</p></div>)}
+      </section>
 
       <section className="reveal reveal-delay-3 mt-10 grid gap-4 lg:grid-cols-[1fr_.65fr]">
         <div className="glass rounded-[26px] p-6 md:p-7"><p className="text-xs font-bold uppercase tracking-[.16em] text-[var(--muted)]">Operational focus</p><h2 className="mt-1 font-display text-2xl font-extrabold tracking-tight">What needs attention</h2><div className="mt-6 space-y-3">{c.guidance.map((text, index) => <div key={text} className="flex gap-3 rounded-2xl bg-black/[.025] p-4"><span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--care-soft)] text-xs font-bold text-[var(--care)]">{index + 1}</span><p className="pt-1 text-sm font-semibold text-[var(--muted-strong)]">{text}</p></div>)}</div></div>
