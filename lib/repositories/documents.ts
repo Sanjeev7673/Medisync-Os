@@ -15,17 +15,7 @@ function assertPatient(session: Session, patientId: string) {
 async function resolveRequestId(session: Session, patientId: string, requestId?: string) {
   if (!requestId) return null;
   assertPatient(session, patientId);
-
-  const db = getDb();
-  // The UI/API uses the human-facing REQ-... identifier, while documents.request_id
-  // is a UUID foreign key. Resolve it server-side and keep the database normalized.
-  const { data, error } = await db
-    .from("requests")
-    .select("id,request_id")
-    .eq("patient_id", patientId)
-    .or(`request_id.eq.${requestId},id.eq.${requestId}`)
-    .maybeSingle<{ id: string; request_id: string }>();
-
+  const { data, error } = await getDb().from("requests").select("id,request_id").eq("patient_id", patientId).or(`request_id.eq.${requestId},id.eq.${requestId}`).maybeSingle<{ id: string; request_id: string }>();
   if (error) throw error;
   if (!data) throw new Error("REQUEST_NOT_FOUND");
   return data.id;
@@ -88,7 +78,7 @@ export async function updateDocumentIntelligence(session: Session, documentId: s
     processing_status: "COMPLETED",
     processing_error: null,
     processed_at: new Date().toISOString(),
-    metadata: { ...(document.metadata ?? {}), ai_analysis: input.analysis, ai_analyzed_at: new Date().toISOString(), ai_model: process.env.OPENAI_DOCUMENT_MODEL || "gpt-5.6-luna" },
+    metadata: { ...(document.metadata ?? {}), ai_analysis: input.analysis, ai_analyzed_at: new Date().toISOString(), ai_model: "gemini-2.5-flash" },
   }).eq("id", documentId).eq("patient_id", session.patientId).select("*").single<DocumentRow>();
   if (error) throw error;
   return data;
