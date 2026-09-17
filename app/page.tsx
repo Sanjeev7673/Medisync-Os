@@ -67,7 +67,6 @@ export default function HomePage() {
           </div>
 
           <div className="relative reveal reveal-delay-2 min-h-[460px] lg:min-h-[540px]">
-            <div className="absolute left-[4%] top-[7%] h-28 w-28 rounded-full border border-white/70 bg-white/45 blur-[1px] mesh-orb" />
             <div className="absolute right-[2%] top-[15%] h-20 w-20 rounded-full bg-[#DDE5FF]/70 blur-xl mesh-orb-delay" />
             <div className="float-card glass absolute left-[2%] top-[10%] w-[78%] rounded-[30px] p-4 shadow-[0_28px_90px_rgba(18,22,29,.13)] sm:left-[8%] sm:w-[76%]">
               <div className="flex items-center justify-between border-b border-black/5 pb-3">
