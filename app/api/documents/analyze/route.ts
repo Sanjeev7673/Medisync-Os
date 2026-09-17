@@ -230,6 +230,10 @@ async function analyzeWithGeminiWithRetry(file: File, apiKey: string, extractedT
 }
 
 async function analyzeWithGroq(file: File, apiKey: string, extractedText?: string) {
+  // PDF reports already have complete OCR text from Mistral, so use Groq's
+  // production text model for that path. Image uploads need a vision model.
+  // The model can still be overridden with GROQ_MODEL in Vercel.
+  const model = process.env.GROQ_MODEL || (extractedText ? "openai/gpt-oss-120b" : "qwen/qwen3.8-27b");
   const content: Array<Record<string, unknown>> = [
     {
       type: "text",
@@ -254,7 +258,7 @@ async function analyzeWithGroq(file: File, apiKey: string, extractedText?: strin
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "qwen/qwen3.6-27b",
+      model,
       messages: [{ role: "user", content }],
       response_format: { type: "json_object" },
       temperature: 0.1,
@@ -267,7 +271,7 @@ async function analyzeWithGroq(file: File, apiKey: string, extractedText?: strin
 
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(`Groq fallback failed (${response.status}): ${text.slice(0, 500)}`);
+    throw new Error(`Groq fallback failed (${response.status}, model=${model}): ${text.slice(0, 500)}`);
   }
 
   const data = await response.json();
