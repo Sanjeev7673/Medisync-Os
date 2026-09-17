@@ -2,6 +2,63 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 
+type HospitalMatch = {
+  hospitalName: string;
+  city: string;
+  tier: string;
+  specialty: string;
+  ownership: string;
+  knownFor: string;
+};
+
+type MatchResponse = {
+  matches: HospitalMatch[];
+  count?: number;
+  source?: string;
+  demo?: boolean;
+  disclaimer?: string;
+};
+
+function normalizeHospitalResponse(data: unknown): MatchResponse {
+  const root = data && typeof data === "object" ? (data as Record<string, unknown>) : {};
+  const responseData = root._responseData && typeof root._responseData === "object"
+    ? (root._responseData as Record<string, unknown>)
+    : {};
+
+  const candidates = [
+    responseData.hospitalResponse,
+    responseData.output,
+    responseData.response,
+    data,
+  ];
+
+  for (const candidate of candidates) {
+    if (!candidate || typeof candidate !== "object") continue;
+    const value = candidate as Record<string, unknown>;
+    if (Array.isArray(value.matches)) {
+      return {
+        matches: value.matches as HospitalMatch[],
+        count: typeof value.count === "number" ? value.count : value.matches.length,
+        source: typeof value.source === "string" ? value.source : "MediSync hospital dataset",
+        demo: value.demo !== false,
+        disclaimer:
+          typeof value.disclaimer === "string"
+            ? value.disclaimer
+            : "Hospital information and tier classification are dataset-based and not live clinical or quality verification.",
+      };
+    }
+  }
+
+  return {
+    matches: [],
+    count: 0,
+    source: "MediSync hospital dataset",
+    demo: true,
+    disclaimer:
+      "Hospital information and tier classification are dataset-based and not live clinical or quality verification.",
+  };
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -45,7 +102,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    return NextResponse.json({ success: true, data });
+    return NextResponse.json({
+      success: true,
+      data: normalizeHospitalResponse(data),
+    });
   } catch (error) {
     console.error("Hospital matching error:", error);
     return NextResponse.json(
