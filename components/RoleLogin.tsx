@@ -8,13 +8,23 @@ import HealthcareMotion from "@/components/HealthcareMotion";
 
 type LoginRole = "patient" | "hospital" | "insurance_agent" | "admin";
 
-const ROLE_CONFIG: Record<LoginRole, { label: string; eyebrow: string; title: string; description: string; accent: string }> = {
+type RoleConfig = {
+  label: string;
+  eyebrow: string;
+  title: string;
+  description: string;
+  accent: string;
+  dashboard: string;
+};
+
+const ROLE_CONFIG: Record<LoginRole, RoleConfig> = {
   patient: {
     label: "Patient Portal",
     eyebrow: "Personal care workspace",
     title: "Your healthcare, connected.",
     description: "Access your MediSync ID, medical records, care requests and authorized provider coordination.",
     accent: "Patient access",
+    dashboard: "/patient/dashboard",
   },
   hospital: {
     label: "Hospital Portal",
@@ -22,6 +32,7 @@ const ROLE_CONFIG: Record<LoginRole, { label: string; eyebrow: string; title: st
     title: "Coordinate care with context.",
     description: "Review referrals, patient evidence, investigations and care coordination tasks from one hospital workspace.",
     accent: "Hospital access",
+    dashboard: "/hospital/dashboard",
   },
   insurance_agent: {
     label: "Insurance Portal",
@@ -29,6 +40,7 @@ const ROLE_CONFIG: Record<LoginRole, { label: string; eyebrow: string; title: st
     title: "Review evidence. Move cases forward.",
     description: "Manage coverage cases, supporting medical evidence, authorizations and claim workflows.",
     accent: "Insurance access",
+    dashboard: "/insurance/dashboard",
   },
   admin: {
     label: "Admin Portal",
@@ -36,8 +48,16 @@ const ROLE_CONFIG: Record<LoginRole, { label: string; eyebrow: string; title: st
     title: "Operate the care network.",
     description: "Manage platform operations, organizations, users, workflows, audit activity and system health.",
     accent: "Administrative access",
+    dashboard: "/admin/dashboard",
   },
 };
+
+const PORTALS: { role: LoginRole; label: string; href: string }[] = [
+  { role: "patient", label: "Patient", href: "/patient/login" },
+  { role: "hospital", label: "Hospital", href: "/hospital/login" },
+  { role: "insurance_agent", label: "Insurance", href: "/insurance/login" },
+  { role: "admin", label: "Admin", href: "/admin/login" },
+];
 
 export default function RoleLogin({ role }: { role: LoginRole }) {
   const router = useRouter();
@@ -61,7 +81,7 @@ export default function RoleLogin({ role }: { role: LoginRole }) {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data?.error || "Unable to sign in");
-      const destination = returnTo?.startsWith("/") ? returnTo : data.redirectTo;
+      const destination = returnTo?.startsWith("/") ? returnTo : data.redirectTo || config.dashboard;
       router.replace(destination);
       router.refresh();
     } catch (err) {
@@ -75,15 +95,45 @@ export default function RoleLogin({ role }: { role: LoginRole }) {
     <main className="mesh-bg relative min-h-screen overflow-hidden px-5 py-6 text-[var(--ink)] md:px-8 md:py-8">
       <div className="mesh-orb absolute -left-24 top-10 h-72 w-72 rounded-full bg-[#B9C5EC]/60 blur-3xl" />
       <div className="mesh-orb-delay absolute -right-24 bottom-0 h-96 w-96 rounded-full bg-[#758FB5]/20 blur-3xl" />
-      <nav className="relative z-10 mx-auto flex max-w-7xl items-center justify-between">
-        <Link href="/login" className="flex items-center gap-3">
+
+      <nav className="relative z-20 mx-auto flex max-w-7xl items-center justify-between gap-4">
+        <Link href="/login" className="flex shrink-0 items-center gap-3" aria-label="Back to MediSync portal selection">
           <Image src="/medisync-mark.svg" alt="MediSync" width={44} height={44} className="rounded-2xl shadow-lg" />
           <div><p className="font-display text-lg font-extrabold tracking-tight">MediSync</p><p className="text-[9px] font-bold uppercase tracking-[.2em] text-[var(--muted)]">Care OS</p></div>
         </Link>
-        <Link href="/login" className="rounded-full border border-black/5 bg-white/60 px-4 py-2 text-xs font-bold text-[var(--muted-strong)] backdrop-blur hover:bg-white">Change portal</Link>
+
+        <div className="hidden items-center gap-1 rounded-2xl border border-black/5 bg-white/65 p-1.5 shadow-sm backdrop-blur md:flex" aria-label="Portal navigation">
+          {PORTALS.map((portal) => (
+            <Link
+              key={portal.role}
+              href={portal.href}
+              aria-current={portal.role === role ? "page" : undefined}
+              className={`rounded-xl px-3.5 py-2 text-xs font-bold transition-all ${portal.role === role ? "bg-[var(--ink)] text-white shadow-md" : "text-[var(--muted-strong)] hover:bg-white hover:text-[var(--ink)]"}`}
+            >
+              {portal.label}
+            </Link>
+          ))}
+        </div>
+
+        <Link href="/login" className="shrink-0 rounded-full border border-black/5 bg-white/60 px-4 py-2 text-xs font-bold text-[var(--muted-strong)] backdrop-blur transition hover:bg-white">
+          All portals
+        </Link>
       </nav>
 
-      <section className="relative z-10 mx-auto grid min-h-[calc(100vh-92px)] max-w-7xl items-center gap-10 py-10 lg:grid-cols-[1.05fr_.95fr] lg:gap-20">
+      <div className="relative z-20 mx-auto mt-4 flex max-w-7xl items-center gap-2 overflow-x-auto pb-1 md:hidden" aria-label="Mobile portal navigation">
+        {PORTALS.map((portal) => (
+          <Link
+            key={portal.role}
+            href={portal.href}
+            aria-current={portal.role === role ? "page" : undefined}
+            className={`whitespace-nowrap rounded-full border px-3 py-2 text-[11px] font-bold ${portal.role === role ? "border-[var(--ink)] bg-[var(--ink)] text-white" : "border-black/5 bg-white/65 text-[var(--muted-strong)]"}`}
+          >
+            {portal.label}
+          </Link>
+        ))}
+      </div>
+
+      <section className="relative z-10 mx-auto grid min-h-[calc(100vh-132px)] max-w-7xl items-center gap-10 py-8 lg:grid-cols-[1.05fr_.95fr] lg:gap-20">
         <div className="reveal hidden lg:block">
           <p className="mb-5 inline-flex rounded-full border border-black/5 bg-white/60 px-4 py-2 text-xs font-bold uppercase tracking-[.16em] text-[var(--care)] backdrop-blur">{config.eyebrow}</p>
           <h1 className="max-w-2xl font-display text-6xl font-extrabold leading-[.98] tracking-[-.045em] xl:text-7xl">{config.title}</h1>
