@@ -19,7 +19,10 @@ export async function POST(req: NextRequest) {
     if (!reset || reset.used_at || new Date(reset.expires_at).getTime() <= Date.now()) return NextResponse.json({ error: "This password reset link is invalid or expired. Please request a new one." }, { status: 410 });
 
     const passwordHash = await bcrypt.hash(password, 12);
-    const { error: userError } = await db.from("users").update({ password_hash: passwordHash, session_version: 1 }).eq("id", reset.user_id);
+    const { data: currentUser, error: currentUserError } = await db.from("users").select("session_version").eq("id", reset.user_id).single<{ session_version: number }>();
+    if (currentUserError || !currentUser) throw currentUserError ?? new Error("User not found");
+
+    const { error: userError } = await db.from("users").update({ password_hash: passwordHash, session_version: Number(currentUser.session_version) + 1 }).eq("id", reset.user_id);
     if (userError) throw userError;
 
     await db.from("password_resets").update({ used_at: new Date().toISOString() }).eq("id", reset.id);
