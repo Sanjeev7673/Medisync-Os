@@ -6,18 +6,33 @@ import { FormEvent, useEffect, useState } from "react";
 import { ArrowRight, Building2, CircleUserRound, Eye, EyeOff, Hospital, KeyRound, ShieldCheck } from "lucide-react";
 
 type Mode = "signin" | "signup";
-type Role = "patient" | "hospital" | "insurance" | "admin";
+type Role = "PATIENT" | "HOSPITAL" | "INSURANCE" | "ADMIN";
+
+type AuthWebhookRequest = {
+  action: "AUTH";
+  role: Role;
+  email: string;
+};
+
+type AuthWebhookResponse = {
+  success: boolean;
+  message?: string;
+  user?: { email: string; role: Role };
+  token?: string;
+};
+
+const AUTH_WEBHOOK_URL = process.env.NEXT_PUBLIC_AUTH_WEBHOOK_URL || "https://api.agents.snsihub.ai/webhook/signin";
 
 const roles = [
-  { key: "patient" as Role, label: "Patient", icon: CircleUserRound },
-  { key: "hospital" as Role, label: "Hospital", icon: Hospital },
-  { key: "insurance" as Role, label: "Insurance", icon: ShieldCheck },
-  { key: "admin" as Role, label: "Admin", icon: Building2 },
+  { key: "PATIENT" as Role, label: "Patient", icon: CircleUserRound },
+  { key: "HOSPITAL" as Role, label: "Hospital", icon: Hospital },
+  { key: "INSURANCE" as Role, label: "Insurance", icon: ShieldCheck },
+  { key: "ADMIN" as Role, label: "Admin", icon: Building2 },
 ];
 
 export default function AuthPage() {
   const [mode, setMode] = useState<Mode>("signin");
-  const [role, setRole] = useState<Role>("patient");
+  const [role, setRole] = useState<Role>("PATIENT");
   const [details, setDetails] = useState<Record<string, string>>({});
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -43,42 +58,50 @@ export default function AuthPage() {
   async function submit(event: FormEvent) {
     event.preventDefault();
     setError("");
-    if (mode === "signup" && password !== confirm) {
-      setError("Passwords do not match.");
-      return;
-    }
-    setLoading(true);
-    try {
-      if (mode === "signin") {
-        const response = await fetch("/api/auth/login", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, password, expectedRole: role }),
-        });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.error || "Unable to sign in");
-        window.location.assign(data.redirectTo);
+
+    if (mode === "signup") {
+      if (password !== confirm) {
+        setError("Passwords do not match.");
         return;
       }
+      setError("Sign-up is handled by the existing MediSync registration and OTP flow.");
+      window.location.assign(`/register/${role.toLowerCase()}`);
+      return;
+    }
 
-      const payload: Record<string, unknown> = { role, email, password };
-      if (role === "patient") Object.assign(payload, { name: details.name, dob: details.dob, phone: details.phone });
-      if (role === "hospital") Object.assign(payload, { hospitalName: details.hospitalName, registrationId: details.registrationId });
-      if (role === "insurance") Object.assign(payload, { agencyName: details.agencyName, agencyId: details.agencyId });
-      if (role === "admin") Object.assign(payload, { name: details.name, adminId: details.adminId });
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail) {
+      setError("Please enter your email address.");
+      return;
+    }
 
-      const response = await fetch("/api/auth/register-role", {
+    setLoading(true);
+    try {
+      const payload: AuthWebhookRequest = { action: "AUTH", role, email: normalizedEmail };
+      const response = await fetch(AUTH_WEBHOOK_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Unable to create account");
-      sessionStorage.setItem("medisync_registration_email", email);
-      sessionStorage.setItem("medisync_registration_role", role);
-      window.location.assign(`/register/${role}`);
+
+      const raw = await response.text();
+      let data: AuthWebhookResponse;
+      try {
+        data = JSON.parse(raw) as AuthWebhookResponse;
+      } catch {
+        const nested = raw.match(/\{[\s\S]*\}/)?.[0];
+        if (!nested) throw new Error("Invalid response from authentication service.");
+        data = JSON.parse(nested) as AuthWebhookResponse;
+      }
+
+      if (!response.ok || !data.success) throw new Error(data.message || "Authentication failed.");
+      if (!data.token) throw new Error("Authentication succeeded but no token was returned.");
+
+      localStorage.setItem("medisync_token", data.token);
+      if (data.user) localStorage.setItem("medisync_user", JSON.stringify(data.user));
+      window.location.assign("/dashboard");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
+      setError(err instanceof Error ? err.message : "Authentication failed. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -120,17 +143,18 @@ export default function AuthPage() {
               <form onSubmit={submit} className="rounded-[26px] border border-black/10 bg-[#FAFAFA] p-5 sm:p-7">
                 <div className="mb-5 flex items-center justify-between"><div><p className="text-xs font-bold uppercase tracking-[.14em] text-[var(--care)]">{selectedRole.label} portal</p><h2 className="mt-1 font-display text-2xl font-extrabold">{mode === "signin" ? "Welcome back" : "Create your account"}</h2></div><ShieldCheck className="h-6 w-6 text-[var(--care)]" /></div>
 
-                {mode === "signup" && role === "patient" && <div className="mb-4 grid gap-4 sm:grid-cols-2"><Field label="Full name" value={details.name || ""} onChange={(v) => setDetail("name", v)} /><Field label="Date of birth" type="date" value={details.dob || ""} onChange={(v) => setDetail("dob", v)} /><Field label="Phone" value={details.phone || ""} onChange={(v) => setDetail("phone", v)} /></div>}
-                {mode === "signup" && role === "hospital" && <div className="mb-4 grid gap-4 sm:grid-cols-2"><Field label="Hospital name" value={details.hospitalName || ""} onChange={(v) => setDetail("hospitalName", v)} /><Field label="Registration / License ID" value={details.registrationId || ""} onChange={(v) => setDetail("registrationId", v)} /></div>}
-                {mode === "signup" && role === "insurance" && <div className="mb-4 grid gap-4 sm:grid-cols-2"><Field label="Agency name" value={details.agencyName || ""} onChange={(v) => setDetail("agencyName", v)} /><Field label="Agency ID" value={details.agencyId || ""} onChange={(v) => setDetail("agencyId", v)} /></div>}
-                {mode === "signup" && role === "admin" && <div className="mb-4 grid gap-4 sm:grid-cols-2"><Field label="Full name" value={details.name || ""} onChange={(v) => setDetail("name", v)} /><Field label="Admin ID" value={details.adminId || ""} onChange={(v) => setDetail("adminId", v)} /></div>}
+                {mode === "signup" && role === "PATIENT" && <div className="mb-4 grid gap-4 sm:grid-cols-2"><Field label="Full name" value={details.name || ""} onChange={(v) => setDetail("name", v)} /><Field label="Date of birth" type="date" value={details.dob || ""} onChange={(v) => setDetail("dob", v)} /><Field label="Phone" value={details.phone || ""} onChange={(v) => setDetail("phone", v)} /></div>}
+                {mode === "signup" && role === "HOSPITAL" && <div className="mb-4 grid gap-4 sm:grid-cols-2"><Field label="Hospital name" value={details.hospitalName || ""} onChange={(v) => setDetail("hospitalName", v)} /><Field label="Registration / License ID" value={details.registrationId || ""} onChange={(v) => setDetail("registrationId", v)} /></div>}
+                {mode === "signup" && role === "INSURANCE" && <div className="mb-4 grid gap-4 sm:grid-cols-2"><Field label="Agency name" value={details.agencyName || ""} onChange={(v) => setDetail("agencyName", v)} /><Field label="Agency ID" value={details.agencyId || ""} onChange={(v) => setDetail("agencyId", v)} /></div>}
+                {mode === "signup" && role === "ADMIN" && <div className="mb-4 grid gap-4 sm:grid-cols-2"><Field label="Full name" value={details.name || ""} onChange={(v) => setDetail("name", v)} /><Field label="Admin ID" value={details.adminId || ""} onChange={(v) => setDetail("adminId", v)} /></div>}
 
                 <Field label="Email address" type="email" value={email} onChange={setEmail} placeholder="you@example.com" />
-                <label className="mt-4 block"><div className="mb-2 flex justify-between"><span className="text-xs font-bold text-[var(--muted-strong)]">Password</span>{mode === "signin" && <Link href={`/forgot-password?role=${role}`} className="text-xs font-bold text-[var(--care)]">Forgot password?</Link>}</div><div className="relative"><input required minLength={mode === "signup" ? 10 : undefined} type={showPassword ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} placeholder={mode === "signup" ? "Minimum 10 characters" : "Enter your password"} className="w-full rounded-xl border border-black/10 bg-white px-4 py-3.5 pr-12 text-sm text-[var(--ink)] outline-none placeholder:text-slate-400 focus:border-[var(--care)]" /><button type="button" onClick={() => setShowPassword((v) => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[var(--ink)]">{showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button></div></label>
+                {mode === "signin" && <label className="mt-4 block"><div className="mb-2 flex justify-between"><span className="text-xs font-bold text-[var(--muted-strong)]">Password</span><Link href={`/forgot-password?role=${role.toLowerCase()}`} className="text-xs font-bold text-[var(--care)]">Forgot password?</Link></div><div className="relative"><input required type={showPassword ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Enter your password" className="w-full rounded-xl border border-black/10 bg-white px-4 py-3.5 pr-12 text-sm text-[var(--ink)] outline-none placeholder:text-slate-400 focus:border-[var(--care)]" /><button type="button" onClick={() => setShowPassword((v) => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[var(--ink)]">{showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button></div></label>}
+                {mode === "signup" && <label className="mt-4 block"><span className="mb-2 block text-xs font-bold text-[var(--muted-strong)]">Password</span><div className="relative"><input required minLength={10} type={showPassword ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Minimum 10 characters" className="w-full rounded-xl border border-black/10 bg-white px-4 py-3.5 pr-12 text-sm text-[var(--ink)] outline-none placeholder:text-slate-400 focus:border-[var(--care)]" /><button type="button" onClick={() => setShowPassword((v) => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[var(--ink)]">{showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button></div></label>}
                 {mode === "signup" && <label className="mt-4 block"><span className="mb-2 block text-xs font-bold text-[var(--muted-strong)]">Confirm password</span><div className="relative"><input required type={showConfirm ? "text" : "password"} value={confirm} onChange={(e) => setConfirm(e.target.value)} className="w-full rounded-xl border border-black/10 bg-white px-4 py-3.5 pr-12 text-sm text-[var(--ink)] outline-none focus:border-[var(--care)]" /><button type="button" onClick={() => setShowConfirm((v) => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[var(--ink)]">{showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button></div></label>}
                 {error && <p className="mt-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-xs text-red-600">{error}</p>}
-                <button disabled={loading} className="group mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--ink)] px-4 py-3.5 text-sm font-extrabold text-white shadow-lg transition hover:-translate-y-0.5 hover:shadow-xl disabled:opacity-50">{loading ? (mode === "signin" ? "Signing in..." : "Creating account...") : (mode === "signin" ? "Sign in" : "Create account")}<ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" /></button>
-                {mode === "signin" && <Link href={`/forgot-password?role=${role}`} className="mt-3 flex items-center justify-center gap-2 rounded-xl border border-black/10 bg-white px-4 py-3 text-xs font-bold text-[var(--muted-strong)]"><KeyRound className="h-4 w-4" /> Get OTP by email</Link>}
+                <button disabled={loading} className="group mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--ink)] px-4 py-3.5 text-sm font-extrabold text-white shadow-lg transition hover:-translate-y-0.5 hover:shadow-xl disabled:opacity-50">{loading ? "Authenticating..." : mode === "signin" ? "Sign in" : "Continue to verification"}<ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" /></button>
+                {mode === "signin" && <Link href={`/forgot-password?role=${role.toLowerCase()}`} className="mt-3 flex items-center justify-center gap-2 rounded-xl border border-black/10 bg-white px-4 py-3 text-xs font-bold text-[var(--muted-strong)]"><KeyRound className="h-4 w-4" /> Get OTP by email</Link>}
               </form>
             </div>
 
