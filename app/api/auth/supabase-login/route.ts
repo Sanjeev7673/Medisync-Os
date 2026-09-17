@@ -72,6 +72,7 @@ export async function POST(req: NextRequest) {
       .from("users")
       .select(userSelect)
       .eq("email", email)
+      .eq("role", expectedRole ? dbRoleMap[expectedRole as Exclude<UserRole, "specialist">] : "PATIENT")
       .maybeSingle<DbUser>();
 
     if (userError) throw userError;
@@ -106,6 +107,7 @@ export async function POST(req: NextRequest) {
           .from("users")
           .select(userSelect)
           .eq("email", email)
+          .eq("role", dbRoleMap[expectedRole])
           .maybeSingle<DbUser>();
         if (retryError) throw retryError;
         user = existingUser;
