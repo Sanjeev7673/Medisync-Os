@@ -32,7 +32,7 @@ STRICT RULES:
 
 Return JSON only. No markdown, no code fences, no HTML.`;
 
-const ANALYSIS_SCHEMA = {
+const ANALYSIS_SCHEMA: any = {
   type: SchemaType.OBJECT,
   properties: {
     document_type: { type: SchemaType.STRING },
