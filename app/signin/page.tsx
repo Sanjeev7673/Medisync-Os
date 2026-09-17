@@ -21,8 +21,6 @@ type AuthWebhookResponse = {
   token?: string;
 };
 
-const AUTH_WEBHOOK_URL = process.env.NEXT_PUBLIC_AUTH_WEBHOOK_URL || "https://api.agents.snsihub.ai/webhook/signin";
-
 const roles = [
   { key: "PATIENT" as Role, label: "Patient", icon: CircleUserRound },
   { key: "HOSPITAL" as Role, label: "Hospital", icon: Hospital },
@@ -78,7 +76,7 @@ export default function AuthPage() {
     setLoading(true);
     try {
       const payload: AuthWebhookRequest = { action: "AUTH", role, email: normalizedEmail };
-      const response = await fetch(AUTH_WEBHOOK_URL, {
+      const response = await fetch("/api/auth/sns", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
