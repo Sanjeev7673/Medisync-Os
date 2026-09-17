@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
 import type { Part } from "@google/generative-ai";
 import { requireLiveSession } from "@/lib/auth";
 
@@ -13,43 +13,80 @@ const ALLOWED_TYPES = new Set([
   "image/webp",
 ]);
 
-const REPORT_PROMPT = `You are MediSync Clinical Evidence Report Generator.
+const REPORT_PROMPT = `You are MediSync Clinical Evidence Data Extractor.
 
-Analyze the supplied medical document/image and create a professional Clinical Evidence Report.
+Extract the medical evidence from the supplied document or OCR text into the required JSON structure.
 
 STRICT RULES:
-- Use ONLY information visible in the supplied document or extracted text.
-- Never invent patient data, values, diagnoses, medications, or recommendations.
-- Preserve names, dates, IDs, values, units, reference ranges, and stated findings exactly.
-- If information is unavailable, write "Not provided".
+- Use ONLY information visible in the supplied document or OCR extracted text.
+- Never invent patient data, values, diagnoses, medications, recommendations, reference ranges, or dates.
+- Preserve names, dates, IDs, values, units, reference ranges, and stated findings exactly when visible.
+- If a field is unavailable, use "Not provided" for strings and [] for arrays.
 - This is AI-assisted extraction and organization, NOT diagnosis or treatment.
 - Do not prescribe, recommend medication changes, or make autonomous clinical decisions.
-- Clearly state that human clinical review is required.
+- possible_associations, red_flags, and questions_for_clinician must only contain items explicitly documented in the source; do not infer new clinical conclusions.
+- findings must include ALL clearly documented laboratory tests or measurable findings when present.
+- For each finding, evidence must be a short source-grounded phrase from the document.
+- confidence is extraction confidence based on source legibility/completeness, not clinical certainty.
+- requires_human_review must always be true.
 
-Return ONLY a compact HTML BODY FRAGMENT. Do not return markdown fences, <!DOCTYPE>, <html>, <head>, <style>, or JavaScript.
+Return JSON only. No markdown, no code fences, no HTML.`;
 
-Use these sections:
-1. MediSync Clinical Evidence Report
-2. Report Information
-3. Patient Information
-4. Documented Findings
-5. Clinical Summary
-6. Key Observations
-7. Human Review Required
-8. Clinical Review / Signature
-9. MediSync Disclaimer
-
-For laboratory reports, include ALL documented tests in a table with test name, result, unit, reference range, and status.
-For other medical documents/images, organize the visible/documented evidence into concise sections without inventing missing details.
-Keep the HTML complete and reasonably short.`;
-
-function stripCodeFence(value: string) {
-  return value
-    .replace(/^```html\s*/i, "")
-    .replace(/^```\s*/i, "")
-    .replace(/\s*```$/i, "")
-    .trim();
-}
+const ANALYSIS_SCHEMA = {
+  type: SchemaType.OBJECT,
+  properties: {
+    document_type: { type: SchemaType.STRING },
+    report_date: { type: SchemaType.STRING },
+    summary: { type: SchemaType.STRING },
+    findings: {
+      type: SchemaType.ARRAY,
+      items: {
+        type: SchemaType.OBJECT,
+        properties: {
+          item: { type: SchemaType.STRING },
+          value: { type: SchemaType.STRING },
+          reference_range: { type: SchemaType.STRING },
+          status: {
+            type: SchemaType.STRING,
+            enum: ["normal", "abnormal", "unclear", "not_reported"],
+          },
+          evidence: { type: SchemaType.STRING },
+        },
+        required: ["item", "value", "reference_range", "status", "evidence"],
+      },
+    },
+    key_observations: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
+    supportive_findings: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
+    limitations_and_concerns: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
+    possible_associations: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
+    symptom_associations: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
+    red_flags: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
+    questions_for_clinician: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
+    priority: { type: SchemaType.STRING },
+    specialty_hint: { type: SchemaType.STRING },
+    workflow: { type: SchemaType.STRING },
+    confidence: { type: SchemaType.NUMBER },
+    requires_human_review: { type: SchemaType.BOOLEAN },
+  },
+  required: [
+    "document_type",
+    "report_date",
+    "summary",
+    "findings",
+    "key_observations",
+    "supportive_findings",
+    "limitations_and_concerns",
+    "possible_associations",
+    "symptom_associations",
+    "red_flags",
+    "questions_for_clinician",
+    "priority",
+    "specialty_hint",
+    "workflow",
+    "confidence",
+    "requires_human_review",
+  ],
+};
 
 async function analyzePdf(file: File, apiKey: string) {
   const bytes = Buffer.from(await file.arrayBuffer());
@@ -65,6 +102,8 @@ async function analyzePdf(file: File, apiKey: string) {
         type: "document_url",
         document_url: `data:application/pdf;base64,${bytes.toString("base64")}`,
       },
+      table_format: "markdown",
+      include_blocks: false,
     }),
     cache: "no-store",
   });
@@ -87,9 +126,14 @@ async function analyzePdf(file: File, apiKey: string) {
 
 async function analyzeWithGemini(file: File, apiKey: string, extractedText?: string) {
   const genAI = new GoogleGenerativeAI(apiKey);
-  // Gemini 2.5 Flash was shut down for this API endpoint. Use the current
-  // stable Gemini 3.6 Flash model for production document analysis.
-  const model = genAI.getGenerativeModel({ model: "gemini-3.6-flash" });
+  const model = genAI.getGenerativeModel({
+    model: "gemini-3.6-flash",
+    generationConfig: {
+      responseMimeType: "application/json",
+      responseSchema: ANALYSIS_SCHEMA,
+    },
+  });
+
   const parts: Part[] = [{ text: REPORT_PROMPT }];
 
   if (extractedText) {
@@ -107,9 +151,18 @@ async function analyzeWithGemini(file: File, apiKey: string, extractedText?: str
   const result = await model.generateContent({
     contents: [{ role: "user", parts }],
   });
-  const html = stripCodeFence(result.response.text());
-  if (!html) throw new Error("Gemini returned an empty report.");
-  return html;
+
+  const raw = result.response.text().trim();
+  if (!raw) throw new Error("Gemini returned an empty extraction.");
+
+  let analysis: Record<string, unknown>;
+  try {
+    analysis = JSON.parse(raw) as Record<string, unknown>;
+  } catch {
+    throw new Error(`Gemini returned invalid structured data: ${raw.slice(0, 500)}`);
+  }
+
+  return analysis;
 }
 
 export async function POST(req: NextRequest) {
@@ -169,7 +222,7 @@ export async function POST(req: NextRequest) {
       sourceType = "image";
     }
 
-    const html = await analyzeWithGemini(file, geminiKey, extractedText);
+    const analysis = await analyzeWithGemini(file, geminiKey, extractedText);
 
     return NextResponse.json({
       success: true,
@@ -177,7 +230,7 @@ export async function POST(req: NextRequest) {
       filename: file.name,
       mimeType: file.type,
       extractedText: extractedText ?? null,
-      reportHtml: html,
+      analysis,
       humanReviewRequired: true,
     });
   } catch (error) {
