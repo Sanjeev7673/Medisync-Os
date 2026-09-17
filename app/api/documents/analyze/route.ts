@@ -44,42 +44,69 @@ For other medical documents/images, organize the visible/documented evidence int
 Keep the HTML complete and reasonably short.`;
 
 function stripCodeFence(value: string) {
-  return value.replace(/^```html\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/i, "").trim();
+  return value
+    .replace(/^```html\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
 }
 
 async function analyzePdf(file: File, apiKey: string) {
   const bytes = Buffer.from(await file.arrayBuffer());
   const response = await fetch("https://api.mistral.ai/v1/ocr", {
     method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
     body: JSON.stringify({
       model: "mistral-ocr-latest",
-      document: { type: "document_url", document_url: `data:application/pdf;base64,${bytes.toString("base64")}` },
+      document: {
+        type: "document_url",
+        document_url: `data:application/pdf;base64,${bytes.toString("base64")}`,
+      },
     }),
     cache: "no-store",
   });
+
   if (!response.ok) {
     const text = await response.text();
     throw new Error(`Mistral OCR failed (${response.status}): ${text.slice(0, 500)}`);
   }
+
   const data = await response.json();
   const pages = Array.isArray(data?.pages) ? data.pages : [];
-  const text = pages.map((page: { markdown?: string; text?: string }) => page.markdown ?? page.text ?? "").join("\n\n").trim();
+  const text = pages
+    .map((page: { markdown?: string; text?: string }) => page.markdown ?? page.text ?? "")
+    .join("\n\n")
+    .trim();
+
   if (!text) throw new Error("Mistral OCR returned no extracted text.");
   return text;
 }
 
 async function analyzeWithGemini(file: File, apiKey: string, extractedText?: string) {
   const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+  // Gemini 2.5 Flash was shut down for this API endpoint. Use the current
+  // stable Gemini 3.6 Flash model for production document analysis.
+  const model = genAI.getGenerativeModel({ model: "gemini-3.6-flash" });
   const parts: Part[] = [{ text: REPORT_PROMPT }];
+
   if (extractedText) {
     parts.push({ text: `\nOCR EXTRACTED TEXT:\n${extractedText}` });
   } else {
     const bytes = Buffer.from(await file.arrayBuffer());
-    parts.push({ inlineData: { mimeType: file.type, data: bytes.toString("base64") } });
+    parts.push({
+      inlineData: {
+        mimeType: file.type,
+        data: bytes.toString("base64"),
+      },
+    });
   }
-  const result = await model.generateContent({ contents: [{ role: "user", parts }] });
+
+  const result = await model.generateContent({
+    contents: [{ role: "user", parts }],
+  });
   const html = stripCodeFence(result.response.text());
   if (!html) throw new Error("Gemini returned an empty report.");
   return html;
@@ -87,39 +114,81 @@ async function analyzeWithGemini(file: File, apiKey: string, extractedText?: str
 
 export async function POST(req: NextRequest) {
   const auth = await requireLiveSession(req, ["patient"]);
-  if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
 
   try {
     const form = await req.formData();
     const file = form.get("file");
+
     if (!(file instanceof File)) {
-      return NextResponse.json({ error: "Please select a PDF or image report." }, { status: 400 });
+      return NextResponse.json(
+        { error: "Please select a PDF or image report." },
+        { status: 400 },
+      );
     }
+
     if (!ALLOWED_TYPES.has(file.type)) {
-      return NextResponse.json({ error: "Supported formats are PDF, PNG, JPEG, and WEBP." }, { status: 400 });
+      return NextResponse.json(
+        { error: "Supported formats are PDF, PNG, JPEG, and WEBP." },
+        { status: 400 },
+      );
     }
+
     if (file.size <= 0 || file.size > 15 * 1024 * 1024) {
-      return NextResponse.json({ error: "File must be between 1 byte and 15 MB." }, { status: 400 });
+      return NextResponse.json(
+        { error: "File must be between 1 byte and 15 MB." },
+        { status: 400 },
+      );
     }
 
     const mistralKey = process.env.MISTRAL_API_KEY;
     const geminiKey = process.env.GEMINI_API_KEY;
-    if (!geminiKey) return NextResponse.json({ error: "GEMINI_API_KEY is not configured." }, { status: 500 });
+
+    if (!geminiKey) {
+      return NextResponse.json(
+        { error: "GEMINI_API_KEY is not configured." },
+        { status: 500 },
+      );
+    }
 
     let extractedText: string | undefined;
     let sourceType: "pdf" | "image";
+
     if (file.type === "application/pdf") {
       sourceType = "pdf";
-      if (!mistralKey) return NextResponse.json({ error: "MISTRAL_API_KEY is not configured." }, { status: 500 });
+      if (!mistralKey) {
+        return NextResponse.json(
+          { error: "MISTRAL_API_KEY is not configured." },
+          { status: 500 },
+        );
+      }
       extractedText = await analyzePdf(file, mistralKey);
     } else {
       sourceType = "image";
     }
 
     const html = await analyzeWithGemini(file, geminiKey, extractedText);
-    return NextResponse.json({ success: true, sourceType, filename: file.name, mimeType: file.type, extractedText: extractedText ?? null, reportHtml: html, humanReviewRequired: true });
+
+    return NextResponse.json({
+      success: true,
+      sourceType,
+      filename: file.name,
+      mimeType: file.type,
+      extractedText: extractedText ?? null,
+      reportHtml: html,
+      humanReviewRequired: true,
+    });
   } catch (error) {
     console.error("MediSync direct document analysis error:", error);
-    return NextResponse.json({ success: false, error: error instanceof Error ? error.message : "Document analysis failed." }, { status: 500 });
+    return NextResponse.json(
+      {
+        success: false,
+        error:
+          error instanceof Error ? error.message : "Document analysis failed.",
+      },
+      { status: 500 },
+    );
   }
 }
