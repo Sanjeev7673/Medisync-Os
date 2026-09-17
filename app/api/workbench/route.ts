@@ -3,9 +3,6 @@ import { requireLiveSession } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
-const WORKBENCH_WEBHOOK_URL = process.env.SNS_WORKBENCH_WEBHOOK_URL;
-const WORKBENCH_WEBHOOK_SECRET = process.env.MEDISYNC_WEBHOOK_SECRET;
-
 const ROLE_MAP = {
   patient: "PATIENT",
   hospital: "HOSPITAL",
@@ -13,7 +10,8 @@ const ROLE_MAP = {
   admin: "ADMIN",
 } as const;
 
-type WorkbenchRole = (typeof ROLE_MAP)[keyof typeof ROLE_MAP];
+type RoutedRole = keyof typeof ROLE_MAP;
+type WorkbenchRole = (typeof ROLE_MAP)[RoutedRole];
 
 function cleanString(value: unknown, fallback = "") {
   return typeof value === "string" ? value.trim() : fallback;
@@ -34,7 +32,10 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  if (!WORKBENCH_WEBHOOK_URL) {
+  const workbenchUrl = process.env.SNS_WORKBENCH_WEBHOOK_URL;
+  const workbenchSecret = process.env.MEDISYNC_WEBHOOK_SECRET;
+
+  if (!workbenchUrl) {
     return NextResponse.json(
       { error: "SNS Workbench webhook is not configured" },
       { status: 503 },
@@ -49,21 +50,21 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const role = ROLE_MAP[auth.session.role] as WorkbenchRole;
+  const requestedRole = auth.session.role as RoutedRole;
+  const role: WorkbenchRole = ROLE_MAP[requestedRole];
+  const input = body as Record<string, unknown>;
+
   const requestType = cleanString(
-    (body as Record<string, unknown>).request_type ??
-      (body as Record<string, unknown>).requestType,
+    input.request_type ?? input.requestType,
     "GENERAL",
   ).toUpperCase();
 
   const requestId = cleanString(
-    (body as Record<string, unknown>).request_id ??
-      (body as Record<string, unknown>).requestId,
+    input.request_id ?? input.requestId,
   );
 
   const documentId = cleanString(
-    (body as Record<string, unknown>).document_id ??
-      (body as Record<string, unknown>).documentId,
+    input.document_id ?? input.documentId,
   );
 
   const payload = {
@@ -71,7 +72,7 @@ export async function POST(req: NextRequest) {
     user_id: auth.session.sub,
     role,
     request_type: requestType,
-    document_id: documentId || undefined,
+    ...(documentId ? { document_id: documentId } : {}),
     source: `medisync_${auth.session.role}_portal`,
     stage: "INITIAL",
   };
@@ -81,11 +82,11 @@ export async function POST(req: NextRequest) {
       "Content-Type": "application/json",
     };
 
-    if (WORKBENCH_WEBHOOK_SECRET) {
-      headers["X-MediSync-Webhook-Secret"] = WORKBENCH_WEBHOOK_SECRET;
+    if (workbenchSecret) {
+      headers["X-MediSync-Webhook-Secret"] = workbenchSecret;
     }
 
-    const response = await fetch(WORKBENCH_WEBHOOK_URL, {
+    const response = await fetch(workbenchUrl, {
       method: "POST",
       headers,
       body: JSON.stringify(payload),
