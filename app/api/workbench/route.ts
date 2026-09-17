@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireLiveSession } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
@@ -7,6 +6,7 @@ const ROLE_MAP = {
   patient: "PATIENT",
   hospital: "HOSPITAL",
   insurance_agent: "INSURANCE",
+  insurance: "INSURANCE",
   admin: "ADMIN",
 } as const;
 
@@ -17,21 +17,12 @@ function cleanString(value: unknown, fallback = "") {
   return typeof value === "string" ? value.trim() : fallback;
 }
 
+function normalizeRole(value: unknown): WorkbenchRole | null {
+  const role = cleanString(value).toLowerCase() as RoutedRole;
+  return ROLE_MAP[role] ?? null;
+}
+
 export async function POST(req: NextRequest) {
-  const auth = await requireLiveSession(req, [
-    "patient",
-    "hospital",
-    "insurance_agent",
-    "admin",
-  ]);
-
-  if (!auth.ok) {
-    return NextResponse.json(
-      { error: auth.error },
-      { status: auth.status },
-    );
-  }
-
   const workbenchUrl = process.env.SNS_WORKBENCH_WEBHOOK_URL;
   const workbenchSecret = process.env.MEDISYNC_WEBHOOK_SECRET;
 
@@ -50,9 +41,23 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const requestedRole = auth.session.role as RoutedRole;
-  const role: WorkbenchRole = ROLE_MAP[requestedRole];
   const input = body as Record<string, unknown>;
+
+  // Phase I testing mode: authentication is intentionally not required yet.
+  // The role is supplied by the Vercel client and validated against the four
+  // supported MediSync portal roles. Real session authentication can be added
+  // later without changing the Workbench webhook contract.
+  const role = normalizeRole(input.role);
+
+  if (!role) {
+    return NextResponse.json(
+      {
+        error: "Invalid role",
+        allowed_roles: ["PATIENT", "HOSPITAL", "INSURANCE", "ADMIN"],
+      },
+      { status: 400 },
+    );
+  }
 
   const requestType = cleanString(
     input.request_type ?? input.requestType,
@@ -67,13 +72,18 @@ export async function POST(req: NextRequest) {
     input.document_id ?? input.documentId,
   );
 
+  const userId = cleanString(
+    input.user_id ?? input.userId,
+    "phase1-test-user",
+  );
+
   const payload = {
     request_id: requestId || crypto.randomUUID(),
-    user_id: auth.session.sub,
+    user_id: userId,
     role,
     request_type: requestType,
     ...(documentId ? { document_id: documentId } : {}),
-    source: `medisync_${auth.session.role}_portal`,
+    source: `medisync_${role.toLowerCase()}_portal`,
     stage: "INITIAL",
   };
 
@@ -110,6 +120,7 @@ export async function POST(req: NextRequest) {
         {
           error: "SNS Workbench request failed",
           request_id: payload.request_id,
+          role,
         },
         { status: 502 },
       );
@@ -133,6 +144,7 @@ export async function POST(req: NextRequest) {
       {
         error: "Unable to reach SNS Workbench",
         request_id: payload.request_id,
+        role,
       },
       { status: 502 },
     );
