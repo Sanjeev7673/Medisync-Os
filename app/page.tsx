@@ -43,7 +43,10 @@ export default function HomePage() {
             <a href="#workflow" className="transition hover:text-[var(--care)]">How it works</a>
             <a href="#architecture" className="transition hover:text-[var(--care)]">Architecture</a>
           </div>
-          <a href="/login" className="rounded-full bg-[var(--ink)] px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-slate-900/10 transition hover:-translate-y-0.5">Open platform</a>
+          <div className="flex items-center gap-2">
+            <a href="/signin" className="rounded-full border border-black/10 bg-white/75 px-4 py-2.5 text-sm font-bold text-[var(--ink)] shadow-sm backdrop-blur transition hover:-translate-y-0.5 hover:bg-white">Sign in</a>
+            <a href="/signup" className="rounded-full bg-[var(--ink)] px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-slate-900/10 transition hover:-translate-y-0.5">Sign up</a>
+          </div>
         </nav>
 
         <section id="top" className="relative z-10 mx-auto grid max-w-7xl items-center gap-12 px-5 pb-20 pt-12 md:px-8 lg:grid-cols-[1.02fr_.98fr] lg:pb-28 lg:pt-20">
@@ -58,7 +61,7 @@ export default function HomePage() {
               MediSync coordinates patient records, documents, providers, insurance, compliance and care workflows through AI-assisted automation — while authorized people stay in control.
             </p>
             <div className="mt-9 flex flex-col gap-3 sm:flex-row">
-              <a href="/login" className="rounded-2xl bg-[var(--care)] px-6 py-3.5 text-center text-sm font-bold text-white shadow-xl shadow-blue-900/15 transition hover:-translate-y-1">Enter MediSync →</a>
+              <a href="/signin" className="rounded-2xl bg-[var(--care)] px-6 py-3.5 text-center text-sm font-bold text-white shadow-xl shadow-blue-900/15 transition hover:-translate-y-1">Sign in to MediSync →</a>
               <a href="#workflow" className="rounded-2xl border border-black/8 bg-white/70 px-6 py-3.5 text-center text-sm font-bold text-[var(--ink)] backdrop-blur transition hover:-translate-y-1">See the workflow</a>
             </div>
             <div className="mt-10 flex flex-wrap gap-x-7 gap-y-3 text-xs font-semibold text-[var(--muted)]">
@@ -146,11 +149,20 @@ export default function HomePage() {
       <section className="mx-auto max-w-7xl px-5 py-20 md:px-8 md:py-24">
         <div className="relative overflow-hidden rounded-[38px] bg-[var(--care)] p-8 text-white shadow-[0_30px_90px_rgba(37,73,168,.20)] sm:p-12 lg:p-16">
           <div className="absolute -right-24 -top-24 h-72 w-72 rounded-full border border-white/15" /><div className="absolute -right-8 -top-8 h-40 w-40 rounded-full border border-white/10" />
-          <div className="relative max-w-2xl"><p className="text-[10px] font-bold uppercase tracking-[.18em] text-white/65">MediSync</p><h2 className="mt-4 font-display text-4xl font-extrabold tracking-[-.04em] sm:text-5xl">Move healthcare administration forward.</h2><p className="mt-5 max-w-xl text-sm leading-7 text-white/75">A connected platform for records, documents, credentialing, insurance, compliance and coordinated care — designed around people, not around paperwork.</p><a href="/login" className="mt-8 inline-flex rounded-2xl bg-white px-6 py-3.5 text-sm font-bold text-[var(--care)] transition hover:-translate-y-1">Open MediSync →</a></div>
+          <div className="relative max-w-2xl"><p className="text-[10px] font-bold uppercase tracking-[.18em] text-white/65">MediSync</p><h2 className="mt-4 font-display text-4xl font-extrabold tracking-[-.04em] sm:text-5xl">Move healthcare administration forward.</h2><p className="mt-5 max-w-xl text-sm leading-7 text-white/75">A connected platform for records, documents, credentialing, insurance, compliance and coordinated care — designed around people, not around paperwork.</p><a href="/signin" className="mt-8 inline-flex rounded-2xl bg-white px-6 py-3.5 text-sm font-bold text-[var(--care)] transition hover:-translate-y-1">Sign in to MediSync →</a></div>
         </div>
       </section>
 
-      <footer className="border-t border-black/5 px-5 py-8 md:px-8"><div className="mx-auto flex max-w-7xl flex-col gap-3 text-xs font-semibold text-[var(--muted)] sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-2"><Image src="/medisync-mark.svg" alt="" width={24} height={24} className="rounded-lg" /><span>MediSync · Connected Care OS</span></div><span>AI-assisted · Human-led · Auditable</span></div></footer>
+      <footer className="border-t border-black/5 px-5 py-8 md:px-8">
+        <div className="mx-auto flex max-w-7xl flex-col gap-5 text-xs font-semibold text-[var(--muted)] sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2"><Image src="/medisync-mark.svg" alt="" width={24} height={24} className="rounded-lg" /><span>MediSync · Connected Care OS</span></div>
+          <div className="flex items-center gap-4">
+            <a href="/signin" className="font-bold text-[var(--ink)] transition hover:text-[var(--care)]">Sign in</a>
+            <a href="/signup" className="rounded-full bg-[var(--ink)] px-4 py-2 font-bold text-white transition hover:-translate-y-0.5">Sign up</a>
+            <span className="hidden sm:inline">AI-assisted · Human-led · Auditable</span>
+          </div>
+        </div>
+      </footer>
     </main>
   );
 }
