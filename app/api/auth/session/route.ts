@@ -3,6 +3,13 @@ import { getSessionFromRequest } from "@/lib/auth";
 
 export async function GET(req: NextRequest) {
   const session = await getSessionFromRequest(req);
-  if (!session) return NextResponse.json({ authenticated: false }, { status: 401 });
-  return NextResponse.json({ authenticated: true, user: session });
+
+  if (!session) {
+    return NextResponse.json({ authenticated: false }, { status: 401 });
+  }
+
+  return NextResponse.json({
+    authenticated: true,
+    user: session,
+  });
 }
