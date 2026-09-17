@@ -45,8 +45,8 @@ export async function GET(req: NextRequest) {
   const stateValue = requestUrl.searchParams.get("state") || "";
   const state = verifyGoogleOAuthState(stateValue);
 
-  if (!state) return NextResponse.redirect(new URL("/signin?googleError=Invalid+or+expired+Google+authentication+request.", requestUrl.origin));
-  if (!code) return redirectError(req, state.role, "Google+authentication+was+cancelled+or+did+not+return+a+code.");
+  if (!state) return NextResponse.redirect(new URL("/signin?googleError=Invalid%20or%20expired%20Google%20authentication%20request.", requestUrl.origin));
+  if (!code) return redirectError(req, state.role, "Google authentication was cancelled or did not return a code.");
 
   try {
     const supabase = createClient(required("SUPABASE_URL"), required("SUPABASE_SECRET_KEY"), {
@@ -80,14 +80,7 @@ export async function GET(req: NextRequest) {
       const passwordHash = await bcrypt.hash(randomBytes(32).toString("hex"), 12);
       const { data: created, error: createError } = await db
         .from("users")
-        .insert({
-          email,
-          password_hash: passwordHash,
-          name,
-          role: ROLE_MAP[state.role],
-          status: "ACTIVE",
-          profile_details: details,
-        })
+        .insert({ email, password_hash: passwordHash, name, role: ROLE_MAP[state.role], status: "ACTIVE", profile_details: details })
         .select("id,medisync_id,email,name,role,organization_id,status,session_version")
         .single<any>();
       if (createError) {
