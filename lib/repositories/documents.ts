@@ -78,7 +78,7 @@ export async function updateDocumentIntelligence(session: Session, documentId: s
     processing_status: "COMPLETED",
     processing_error: null,
     processed_at: new Date().toISOString(),
-    metadata: { ...(document.metadata ?? {}), ai_analysis: input.analysis, ai_analyzed_at: new Date().toISOString(), ai_model: "gemini-2.5-flash" },
+    metadata: { ...(document.metadata ?? {}), ai_analysis: input.analysis, ai_analyzed_at: new Date().toISOString(), ai_model: "gemini-3.6-flash" },
   }).eq("id", documentId).eq("patient_id", session.patientId).select("*").single<DocumentRow>();
   if (error) throw error;
   return data;
