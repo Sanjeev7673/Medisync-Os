@@ -7,7 +7,6 @@ import { FormEvent, useState } from "react";
 import HealthcareMotion from "@/components/HealthcareMotion";
 
 type LoginRole = "patient" | "hospital" | "insurance_agent" | "admin";
-
 type RoleConfig = { label: string; eyebrow: string; title: string; description: string; accent: string; dashboard: string };
 
 const ROLE_CONFIG: Record<LoginRole, RoleConfig> = {
@@ -23,6 +22,14 @@ const PORTALS: { role: LoginRole; label: string; href: string }[] = [
   { role: "insurance_agent", label: "Insurance", href: "/insurance/login" },
   { role: "admin", label: "Admin", href: "/admin/login" },
 ];
+
+function EyeIcon({ open }: { open: boolean }) {
+  return open ? (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.5"/></svg>
+  ) : (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m3 3 18 18"/><path d="M10.6 6.2A9.8 9.8 0 0 1 12 6c6 0 9.5 6 9.5 6a17.7 17.7 0 0 1-3.1 3.8M6.1 6.1C3.8 7.7 2.5 12 2.5 12S6 18 12 18a9.7 9.7 0 0 0 3.1-.5"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>
+  );
+}
 
 export default function RoleLogin({ role }: { role: LoginRole }) {
   const router = useRouter();
@@ -61,7 +68,7 @@ export default function RoleLogin({ role }: { role: LoginRole }) {
         <div className="reveal reveal-delay-1 mx-auto w-full max-w-xl"><div className="glass rounded-[34px] p-2 shadow-[0_28px_90px_rgba(18,22,29,.14)]"><form onSubmit={submit} className="rounded-[28px] bg-white p-7 sm:p-9">
           <div className="mb-7"><p className="text-xs font-bold uppercase tracking-[.18em] text-[var(--care)]">{config.label}</p><h2 className="mt-3 font-display text-3xl font-extrabold tracking-tight">Sign in securely.</h2><p className="mt-3 text-sm leading-6 text-[var(--muted)]">This portal only accepts accounts assigned to the {config.label.replace(" Portal", "").toLowerCase()} workspace.</p></div>
           <label className="block text-sm font-bold">Email<input required type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} className="mt-2 w-full rounded-2xl border border-black/10 bg-[#FAFAFA] px-4 py-3 outline-none transition focus:border-[var(--care)]" /></label>
-          <label className="mt-4 block text-sm font-bold">Password<div className="relative mt-2"><input required type={showPassword ? "text" : "password"} autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full rounded-2xl border border-black/10 bg-[#FAFAFA] px-4 py-3 pr-12 outline-none transition focus:border-[var(--care)]" /><button type="button" aria-label={showPassword ? "Hide password" : "Show password"} onClick={() => setShowPassword((visible) => !visible)} className="absolute right-3 top-1/2 -translate-y-1/2 rounded-xl p-2 text-[var(--muted-strong)] transition hover:bg-black/5 hover:text-[var(--ink)]">{showPassword ? "◉" : "◌"}</button></div></label>
+          <label className="mt-4 block text-sm font-bold">Password<div className="relative mt-2"><input required type={showPassword ? "text" : "password"} autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full rounded-2xl border border-black/10 bg-[#FAFAFA] px-4 py-3 pr-14 outline-none transition focus:border-[var(--care)]" /><button type="button" aria-label={showPassword ? "Hide password" : "Show password"} title={showPassword ? "Hide password" : "Show password"} onClick={() => setShowPassword((visible) => !visible)} className="absolute right-2 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-xl text-[var(--muted-strong)] transition hover:bg-black/5 hover:text-[var(--ink)] focus:outline-none focus:ring-2 focus:ring-[var(--care)]/30"><EyeIcon open={showPassword} /></button></div></label>
           <div className="mt-3 text-right"><Link href="/forgot-password" className="text-sm font-bold text-[var(--care)] hover:underline">Forgot password?</Link></div>
           {error && <div className="mt-4 rounded-2xl bg-[var(--danger-soft)] px-4 py-3 text-xs font-semibold leading-5 text-[var(--danger)]">{error}</div>}
           <button disabled={loading} className="group mt-5 flex w-full items-center justify-between rounded-2xl bg-[var(--ink)] px-5 py-4 text-sm font-bold text-white shadow-xl transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"><span>{loading ? "Signing in…" : `Continue to ${config.label.replace(" Portal", "")}`}</span><span>→</span></button>
