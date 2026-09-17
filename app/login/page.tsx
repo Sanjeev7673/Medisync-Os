@@ -2,7 +2,6 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import HealthcareMotion from "@/components/HealthcareMotion";
 
 const portals = [
@@ -13,10 +12,8 @@ const portals = [
 ];
 
 export default function LoginPortalSelector() {
-  const router = useRouter();
-
   const openPortal = (href: string) => {
-    router.push(href);
+    window.location.assign(href);
   };
 
   return (
