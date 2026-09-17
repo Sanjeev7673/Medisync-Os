@@ -21,8 +21,8 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // Public authentication endpoints and the login page must remain reachable.
-  if (pathname === "/login" || pathname.startsWith("/api/auth/")) {
+  // All four portal login pages are public entry points. The login API performs the actual role check.
+  if (pathname === "/login" || pathname.startsWith("/login/") || pathname.startsWith("/api/auth/")) {
     return NextResponse.next();
   }
 
@@ -42,7 +42,6 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(new URL(dashboardForRole(session.role), req.url));
   }
 
-  // Legacy patient-only namespaces are protected at the edge as well.
   const patientOnly =
     pathname.startsWith("/requests") ||
     pathname.startsWith("/documents") ||
@@ -58,6 +57,7 @@ export async function middleware(req: NextRequest) {
 export const config = {
   matcher: [
     "/dashboard/:path*",
+    "/login/:path*",
     "/patient/:path*",
     "/hospital/:path*",
     "/insurance/:path*",
