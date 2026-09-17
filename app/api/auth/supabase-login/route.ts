@@ -35,7 +35,9 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => null);
     const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
     const password = typeof body?.password === "string" ? body.password : "";
-    const expectedRole = typeof body?.expectedRole === "string" ? body.expectedRole as UserRole : undefined;
+    const expectedRole = typeof body?.expectedRole === "string"
+      ? (body.expectedRole === "insurance" ? "insurance_agent" : body.expectedRole) as UserRole
+      : undefined;
 
     if (!email || !password) {
       return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
@@ -55,7 +57,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
     }
 
-    const { data: user, error: userError } = await getDb()
+    const db = getDb();
+    let { data: user, error: userError } = await db
       .from("users")
       .select("id,medisync_id,email,password_hash,name,role,organization_id,status,session_version,created_at,updated_at")
       .eq("email", email)
@@ -63,8 +66,25 @@ export async function POST(req: NextRequest) {
 
     if (userError) throw userError;
 
-    if (!user || user.status !== "ACTIVE") {
-      return NextResponse.json({ error: "Your MediSync account is not active." }, { status: 403 });
+    if (!user) {
+      return NextResponse.json({
+        error: "Your Supabase account is authenticated, but no MediSync profile exists for this email. Create the MediSync profile first."
+      }, { status: 403 });
+    }
+
+    // Supabase Auth is now the source of truth for the password. Once it
+    // successfully authenticates an existing MediSync profile, make that
+    // profile active so a newly-created Supabase user can enter the portal.
+    if (user.status !== "ACTIVE") {
+      const { data: activatedUser, error: activateError } = await db
+        .from("users")
+        .update({ status: "ACTIVE" })
+        .eq("id", user.id)
+        .select("id,medisync_id,email,password_hash,name,role,organization_id,status,session_version,created_at,updated_at")
+        .single<DbUser>();
+
+      if (activateError) throw activateError;
+      user = activatedUser;
     }
 
     const role = roleMap[user.role];
