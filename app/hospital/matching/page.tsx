@@ -20,6 +20,30 @@ type MatchResponse = {
   disclaimer?: string;
 };
 
+const hospitalBrandDomains: Record<string, string> = {
+  "apollo": "apollohospitals.com",
+  "frontier": "frontierlifeline.com",
+  "mgm healthcare": "mgmhealthcare.in",
+};
+
+function getHospitalLogo(name: string) {
+  const normalized = name.toLowerCase();
+  const key = Object.keys(hospitalBrandDomains).find((brand) => normalized.includes(brand));
+  if (!key) return null;
+  return `https://www.google.com/s2/favicons?domain=${hospitalBrandDomains[key]}&sz=128`;
+}
+
+function getInitials(name: string) {
+  return name
+    .replace(/\([^)]*\)/g, "")
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase();
+}
+
 export default function HospitalMatchingPage() {
   const [specialty, setSpecialty] = useState("");
   const [city, setCity] = useState("");
@@ -99,24 +123,55 @@ export default function HospitalMatchingPage() {
             </div>
 
             {result.matches.length ? (
-              <div className="mt-5 grid gap-4 md:grid-cols-2">
-                {result.matches.map((hospital) => (
-                  <article key={`${hospital.hospitalName}-${hospital.city}`} className="glass rounded-[28px] p-6 md:p-7">
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <p className="text-xs font-bold uppercase tracking-[.15em] text-[var(--muted)]">Matched provider</p>
-                        <h3 className="mt-1 font-display text-xl font-extrabold">{hospital.hospitalName}</h3>
+              <div className="mt-5 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {result.matches.map((hospital) => {
+                  const logo = getHospitalLogo(hospital.hospitalName);
+                  return (
+                    <article key={`${hospital.hospitalName}-${hospital.city}`} className="glass overflow-hidden rounded-[28px] p-5 md:p-6">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-black/5 bg-white p-2 shadow-sm">
+                            {logo ? (
+                              <img
+                                src={logo}
+                                alt={`${hospital.hospitalName} logo`}
+                                className="h-full w-full object-contain"
+                                loading="lazy"
+                                referrerPolicy="no-referrer"
+                              />
+                            ) : (
+                              <span className="text-lg font-extrabold text-[var(--care)]">{getInitials(hospital.hospitalName)}</span>
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-[10px] font-bold uppercase tracking-[.15em] text-[var(--muted)]">Matched provider</p>
+                            <h3 className="mt-1 font-display text-lg font-extrabold leading-tight">{hospital.hospitalName}</h3>
+                          </div>
+                        </div>
+                        <span className="shrink-0 rounded-full bg-[var(--care-soft)] px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[var(--care)]">{hospital.tier}</span>
                       </div>
-                      <span className="shrink-0 rounded-full bg-[var(--care-soft)] px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[var(--care)]">{hospital.tier}</span>
-                    </div>
-                    <p className="mt-4 text-sm text-[var(--muted)]">{hospital.city}</p>
-                    <p className="mt-2 text-xs font-semibold text-[var(--muted-strong)]">{hospital.ownership}</p>
-                    <p className="mt-3 text-sm leading-6 text-[var(--muted)]">{hospital.knownFor}</p>
-                    <div className="mt-5 flex flex-wrap gap-2">
-                      <span className="rounded-full bg-black/[.04] px-3 py-1.5 text-xs font-semibold">{hospital.specialty}</span>
-                    </div>
-                  </article>
-                ))}
+
+                      <div className="mt-5 flex flex-wrap gap-2 text-xs font-semibold text-[var(--muted)]">
+                        <span className="rounded-full bg-black/[.04] px-3 py-1.5">📍 {hospital.city}</span>
+                        <span className="rounded-full bg-black/[.04] px-3 py-1.5">🏥 {hospital.ownership}</span>
+                      </div>
+
+                      <div className="mt-4 rounded-2xl bg-[var(--care-soft)] p-4">
+                        <p className="text-[10px] font-bold uppercase tracking-[.15em] text-[var(--muted)]">Known for</p>
+                        <p className="mt-1 text-sm leading-5 text-[var(--muted-strong)]">{hospital.knownFor}</p>
+                      </div>
+
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <span className="rounded-full border border-black/5 bg-white px-3 py-1.5 text-xs font-semibold">{hospital.specialty}</span>
+                      </div>
+
+                      <div className="mt-5 flex gap-2">
+                        <button type="button" className="min-h-10 flex-1 rounded-xl border border-[var(--ink)] px-3 py-2 text-xs font-bold text-[var(--ink)]">View Details</button>
+                        <button type="button" className="min-h-10 flex-1 rounded-xl bg-[var(--ink)] px-3 py-2 text-xs font-bold text-white">Contact Hospital ↗</button>
+                      </div>
+                    </article>
+                  );
+                })}
               </div>
             ) : (
               <div className="glass mt-5 rounded-[28px] p-10 text-center">
