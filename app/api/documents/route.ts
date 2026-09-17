@@ -62,7 +62,7 @@ async function analyzeDirect(req: NextRequest, file: File) {
     filename: string;
     mimeType: string;
     extractedText: string | null;
-    reportHtml: string;
+    analysis: Record<string, unknown>;
     humanReviewRequired: boolean;
   };
 }
@@ -143,7 +143,7 @@ export async function POST(req: NextRequest) {
       const analysis = await analyzeDirect(req, file);
       const saved = await updateDocumentIntelligence(session, document.id, {
         analysis: {
-          report_html: analysis.reportHtml,
+          ...analysis.analysis,
           source_type: analysis.sourceType,
           filename: analysis.filename,
           mime_type: analysis.mimeType,
@@ -155,10 +155,11 @@ export async function POST(req: NextRequest) {
 
       return NextResponse.json({
         document: saved,
-        analysis: analysis.reportHtml,
+        analysis: analysis.analysis,
+        ocrText: analysis.extractedText,
         workflow: {
           status: "completed",
-          message: "Document analyzed with Mistral OCR and Gemini and saved for human review.",
+          message: "Document extracted with Mistral OCR and Gemini and saved for human review.",
         },
       }, { status: 201 });
     } catch (error) {
