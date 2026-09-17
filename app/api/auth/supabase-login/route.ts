@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import bcrypt from "bcryptjs";
-import { randomBytes } from "node:crypto";
 import {
   createSession,
   dashboardForRole,
@@ -39,6 +37,8 @@ function required(name: "SUPABASE_URL" | "SUPABASE_SECRET_KEY") {
   return value;
 }
 
+const userSelect = "id,medisync_id,email,name,role,organization_id,status,session_version,created_at,updated_at";
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => null);
@@ -60,6 +60,7 @@ export async function POST(req: NextRequest) {
       auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false },
     });
 
+    // Supabase Auth is the only source of truth for email/password credentials.
     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email, password });
 
     if (authError || !authData.user) {
@@ -69,72 +70,60 @@ export async function POST(req: NextRequest) {
     const db = getDb();
     let { data: user, error: userError } = await db
       .from("users")
-      .select("id,medisync_id,email,password_hash,name,role,organization_id,status,session_version,created_at,updated_at,profile_details")
+      .select(userSelect)
       .eq("email", email)
       .maybeSingle<DbUser>();
 
     if (userError) throw userError;
 
-    // A user created directly in Supabase Auth may not have a matching
-    // MediSync profile yet. Create the minimum application profile from the
-    // selected portal so the existing MediSync session/dashboard can work.
+    // A user created directly in Supabase Auth gets a lightweight MediSync
+    // profile on first login. No password is copied into public.users.
     if (!user) {
       if (!expectedRole || expectedRole === "specialist") {
-        return NextResponse.json({
-          error: "Please select a valid MediSync portal before signing in.",
-        }, { status: 400 });
+        return NextResponse.json({ error: "Please select a valid MediSync portal before signing in." }, { status: 400 });
       }
 
-      const nameFromMetadata = [
+      const metadataName = [
         authData.user.user_metadata?.full_name,
         authData.user.user_metadata?.name,
       ].find((value) => typeof value === "string" && value.trim());
-      const name = nameFromMetadata?.trim() || email.split("@")[0] || "MediSync User";
-      const placeholderPasswordHash = await bcrypt.hash(randomBytes(32).toString("hex"), 12);
+      const name = metadataName?.trim() || email.split("@")[0] || "MediSync User";
 
       const { data: createdUser, error: createError } = await db
         .from("users")
         .insert({
           email,
-          password_hash: placeholderPasswordHash,
           name,
           role: dbRoleMap[expectedRole],
           status: "ACTIVE",
-          profile_details: {},
         })
-        .select("id,medisync_id,email,password_hash,name,role,organization_id,status,session_version,created_at,updated_at,profile_details")
+        .select(userSelect)
         .single<DbUser>();
 
       if (createError) {
-        if (createError.code === "23505") {
-          const { data: existingUser, error: retryError } = await db
-            .from("users")
-            .select("id,medisync_id,email,password_hash,name,role,organization_id,status,session_version,created_at,updated_at,profile_details")
-            .eq("email", email)
-            .maybeSingle<DbUser>();
-          if (retryError) throw retryError;
-          user = existingUser;
-        } else {
-          throw createError;
-        }
+        if (createError.code !== "23505") throw createError;
+        const { data: existingUser, error: retryError } = await db
+          .from("users")
+          .select(userSelect)
+          .eq("email", email)
+          .maybeSingle<DbUser>();
+        if (retryError) throw retryError;
+        user = existingUser;
       } else {
         user = createdUser;
       }
     }
 
     if (!user) {
-      return NextResponse.json({ error: "Unable to create your MediSync profile. Please try again." }, { status: 500 });
+      return NextResponse.json({ error: "MediSync profile could not be created." }, { status: 500 });
     }
 
-    // Supabase Auth is the source of truth for the password. Once it
-    // successfully authenticates an existing MediSync profile, keep the
-    // application profile active so the user can enter the portal.
     if (user.status !== "ACTIVE") {
       const { data: activatedUser, error: activateError } = await db
         .from("users")
         .update({ status: "ACTIVE" })
         .eq("id", user.id)
-        .select("id,medisync_id,email,password_hash,name,role,organization_id,status,session_version,created_at,updated_at,profile_details")
+        .select(userSelect)
         .single<DbUser>();
 
       if (activateError) throw activateError;
