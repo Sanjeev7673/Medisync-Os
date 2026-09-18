@@ -8,6 +8,7 @@ const NAV = [
   { href: "/patient/dashboard", label: "Overview", icon: "◈" },
   { href: "/requests/new", label: "New request", icon: "＋" },
   { href: "/documents", label: "Documents", icon: "▱" },
+  { href: "/hospitals/compare", label: "Hospital matching", icon: "⌕" },
   { href: "/appointments", label: "Appointments", icon: "□" },
   { href: "/profile", label: "Profile", icon: "◎" },
 ];
