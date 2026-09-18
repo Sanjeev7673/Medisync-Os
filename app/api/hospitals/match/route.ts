@@ -21,9 +21,10 @@ type MatchResponse = {
 
 function normalizeHospitalResponse(data: unknown): MatchResponse {
   const root = data && typeof data === "object" ? (data as Record<string, unknown>) : {};
-  const responseData = root._responseData && typeof root._responseData === "object"
-    ? (root._responseData as Record<string, unknown>)
-    : {};
+  const responseData =
+    root._responseData && typeof root._responseData === "object"
+      ? (root._responseData as Record<string, unknown>)
+      : {};
 
   const candidates = [
     responseData.hospitalResponse,
@@ -32,21 +33,36 @@ function normalizeHospitalResponse(data: unknown): MatchResponse {
     data,
   ];
 
+  // Workbench can expose both an empty wrapper response and a populated
+  // structured output. Prefer the candidate containing the most matches.
+  let best: Record<string, unknown> | null = null;
+  let bestMatchCount = -1;
+
   for (const candidate of candidates) {
     if (!candidate || typeof candidate !== "object") continue;
     const value = candidate as Record<string, unknown>;
-    if (Array.isArray(value.matches)) {
-      return {
-        matches: value.matches as HospitalMatch[],
-        count: typeof value.count === "number" ? value.count : value.matches.length,
-        source: typeof value.source === "string" ? value.source : "MediSync hospital dataset",
-        demo: value.demo !== false,
-        disclaimer:
-          typeof value.disclaimer === "string"
-            ? value.disclaimer
-            : "Hospital information and tier classification are dataset-based and not live clinical or quality verification.",
-      };
+    if (!Array.isArray(value.matches)) continue;
+
+    if (value.matches.length > bestMatchCount) {
+      best = value;
+      bestMatchCount = value.matches.length;
     }
+  }
+
+  if (best) {
+    return {
+      matches: best.matches as HospitalMatch[],
+      count: typeof best.count === "number" ? best.count : best.matches.length,
+      source:
+        typeof best.source === "string"
+          ? best.source
+          : "MediSync hospital dataset",
+      demo: best.demo !== false,
+      disclaimer:
+        typeof best.disclaimer === "string"
+          ? best.disclaimer
+          : "Hospital information and tier classification are dataset-based and not live clinical or quality verification.",
+    };
   }
 
   return {
