@@ -43,16 +43,22 @@ function normalizeHospitalResponse(data: unknown): MatchResponse {
     const value = candidate as Record<string, unknown>;
     if (!Array.isArray(value.matches)) continue;
 
-    if (value.matches.length > bestMatchCount) {
+    const matches = value.matches as HospitalMatch[];
+
+    if (matches.length > bestMatchCount) {
       best = value;
-      bestMatchCount = value.matches.length;
+      bestMatchCount = matches.length;
     }
   }
 
   if (best) {
+    const matches = Array.isArray(best.matches)
+      ? (best.matches as HospitalMatch[])
+      : [];
+
     return {
-      matches: best.matches as HospitalMatch[],
-      count: typeof best.count === "number" ? best.count : best.matches.length,
+      matches,
+      count: typeof best.count === "number" ? best.count : matches.length,
       source:
         typeof best.source === "string"
           ? best.source
