@@ -6,10 +6,20 @@ import RoleShell from "@/components/RoleShell";
 type HospitalMatch = {
   hospitalName: string;
   city: string;
+  district?: string;
   tier: string;
   specialty: string;
+  emoji?: string;
   ownership: string;
   knownFor: string;
+  logoUrl?: string;
+  logoFallback?: string;
+  cost?: string;
+  costTreatment?: string;
+  costType?: string;
+  costSource?: string;
+  sourceSheet?: string;
+  [key: string]: unknown;
 };
 
 type MatchResponse = {
@@ -26,8 +36,9 @@ const hospitalBrandDomains: Record<string, string> = {
   "mgm healthcare": "mgmhealthcare.in",
 };
 
-function getHospitalLogo(name: string) {
-  const normalized = name.toLowerCase();
+function getHospitalLogo(hospital: HospitalMatch) {
+  if (hospital.logoUrl) return hospital.logoUrl;
+  const normalized = hospital.hospitalName.toLowerCase();
   const key = Object.keys(hospitalBrandDomains).find((brand) => normalized.includes(brand));
   if (!key) return null;
   return `https://www.google.com/s2/favicons?domain=${hospitalBrandDomains[key]}&sz=128`;
@@ -125,7 +136,7 @@ export default function HospitalMatchingPage() {
             {result.matches.length ? (
               <div className="mt-5 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {result.matches.map((hospital) => {
-                  const logo = getHospitalLogo(hospital.hospitalName);
+                  const logo = getHospitalLogo(hospital);
                   return (
                     <article key={`${hospital.hospitalName}-${hospital.city}`} className="glass overflow-hidden rounded-[28px] p-5 md:p-6">
                       <div className="flex items-start justify-between gap-3">
@@ -140,12 +151,12 @@ export default function HospitalMatchingPage() {
                                 referrerPolicy="no-referrer"
                               />
                             ) : (
-                              <span className="text-lg font-extrabold text-[var(--care)]">{getInitials(hospital.hospitalName)}</span>
+                              <span className="text-lg font-extrabold text-[var(--care)]">{hospital.logoFallback || getInitials(hospital.hospitalName)}</span>
                             )}
                           </div>
                           <div className="min-w-0">
                             <p className="text-[10px] font-bold uppercase tracking-[.15em] text-[var(--muted)]">Matched provider</p>
-                            <h3 className="mt-1 font-display text-lg font-extrabold leading-tight">{hospital.hospitalName}</h3>
+                            <h3 className="mt-1 font-display text-lg font-extrabold leading-tight">{hospital.emoji ? `${hospital.emoji} ` : ""}{hospital.hospitalName}</h3>
                           </div>
                         </div>
                         <span className="shrink-0 rounded-full bg-[var(--care-soft)] px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[var(--care)]">{hospital.tier}</span>
@@ -154,6 +165,7 @@ export default function HospitalMatchingPage() {
                       <div className="mt-5 flex flex-wrap gap-2 text-xs font-semibold text-[var(--muted)]">
                         <span className="rounded-full bg-black/[.04] px-3 py-1.5">📍 {hospital.city}</span>
                         <span className="rounded-full bg-black/[.04] px-3 py-1.5">🏥 {hospital.ownership}</span>
+                        <span className="rounded-full bg-black/[.04] px-3 py-1.5">📌 {hospital.district || "Not provided"}</span>
                       </div>
 
                       <div className="mt-4 rounded-2xl bg-[var(--care-soft)] p-4">
@@ -164,6 +176,37 @@ export default function HospitalMatchingPage() {
                       <div className="mt-4 flex flex-wrap gap-2">
                         <span className="rounded-full border border-black/5 bg-white px-3 py-1.5 text-xs font-semibold">{hospital.specialty}</span>
                       </div>
+
+                      <div className="mt-4 rounded-2xl border border-black/5 bg-white p-4">
+                        <p className="text-[10px] font-bold uppercase tracking-[.15em] text-[var(--muted)]">Cost information</p>
+                        <div className="mt-2 space-y-1 text-xs text-[var(--muted-strong)]">
+                          <p><strong>Cost:</strong> {hospital.cost || "Not provided"}</p>
+                          <p><strong>Treatment:</strong> {hospital.costTreatment || "Not provided"}</p>
+                          <p><strong>Type:</strong> {hospital.costType || "Not provided"}</p>
+                          <p><strong>Source:</strong> {hospital.costSource || "Not provided"}</p>
+                        </div>
+                      </div>
+
+                      <details className="mt-4 rounded-2xl border border-black/5 bg-white p-4">
+                        <summary className="cursor-pointer text-xs font-bold text-[var(--ink)]">View all dataset fields</summary>
+                        <div className="mt-3 space-y-1 text-xs leading-5 text-[var(--muted-strong)]">
+                          <p><strong>Hospital name:</strong> {hospital.hospitalName}</p>
+                          <p><strong>City:</strong> {hospital.city}</p>
+                          <p><strong>District:</strong> {hospital.district || "Not provided"}</p>
+                          <p><strong>Tier:</strong> {hospital.tier}</p>
+                          <p><strong>Specialty:</strong> {hospital.specialty}</p>
+                          <p><strong>Emoji:</strong> {hospital.emoji || "Not provided"}</p>
+                          <p><strong>Ownership:</strong> {hospital.ownership}</p>
+                          <p><strong>Known for:</strong> {hospital.knownFor}</p>
+                          <p className="break-all"><strong>Logo URL:</strong> {hospital.logoUrl || "Not provided"}</p>
+                          <p><strong>Logo fallback:</strong> {hospital.logoFallback || "Not provided"}</p>
+                          <p><strong>Cost:</strong> {hospital.cost || "Not provided"}</p>
+                          <p><strong>Cost treatment:</strong> {hospital.costTreatment || "Not provided"}</p>
+                          <p><strong>Cost type:</strong> {hospital.costType || "Not provided"}</p>
+                          <p><strong>Cost source:</strong> {hospital.costSource || "Not provided"}</p>
+                          <p><strong>Source sheet:</strong> {hospital.sourceSheet || "Not provided"}</p>
+                        </div>
+                      </details>
 
                       <div className="mt-5 flex gap-2">
                         <button type="button" className="min-h-10 flex-1 rounded-xl border border-[var(--ink)] px-3 py-2 text-xs font-bold text-[var(--ink)]">View Details</button>
