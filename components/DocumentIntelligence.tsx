@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import InsuranceCoverageMatches from "@/components/InsuranceCoverageMatches";
 
 type Finding = {
   item: string;
@@ -138,6 +139,8 @@ export default function DocumentIntelligence() {
           <Section title="Supportive findings / limitations" items={[...(a.supportive_findings || []), ...(a.limitations_and_concerns || [])]} /><Section title="Possible associations — not a diagnosis" items={a.possible_associations} /><Section title="Questions to discuss with your clinician" items={a.questions_for_clinician} /><Section title="Source-documented red flags" items={a.red_flags} />
 
           <section className="mt-8 rounded-2xl border border-[#0b5960]/15 bg-[#fff8e8] p-5"><p className="text-[10px] font-black uppercase tracking-[.16em] text-[#8a6500]">Human review required</p><p className="mt-2 text-[11px] leading-5 text-slate-700">This report contains AI-assisted extraction only. The original source document remains authoritative and a qualified clinician must verify all extracted clinical information before clinical use.</p></section>
+
+          <InsuranceCoverageMatches documentId={doc.id} analysis={a} />
         </div>
         <footer className="bg-[#075e66] px-7 py-5 text-white md:px-10"><div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><p className="text-[11px] font-black uppercase tracking-[.2em]">MEDISYNC</p><p className="text-[9px] font-semibold text-white/80">Secure & Encrypted · Patient Controlled</p></div></footer>
       </article>;
