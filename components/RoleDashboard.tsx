@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import RoleShell from "@/components/RoleShell";
 import StatusBadge from "@/components/StatusBadge";
 import { PatientRequest } from "@/lib/types";
+import InsuranceAICopilot from "@/components/InsuranceAICopilot";
 
 type Role = "patient" | "hospital" | "insurance_agent";
 type SessionUser = { email?: string; name?: string; medisyncId?: string; patientId?: string; hospitalId?: string; insuranceAgentId?: string; role: Role | "specialist" | "admin" };
@@ -97,6 +98,7 @@ export default function RoleDashboard({ role }: { role: Role }) {
         </section>
       </> : <>
         <section className="reveal reveal-delay-3 mt-10 grid gap-4 lg:grid-cols-[1fr_.65fr]"><div className="glass rounded-[26px] p-6 md:p-7"><p className="text-xs font-bold uppercase tracking-[.16em] text-[var(--muted)]">{role === "hospital" ? "Referral queue" : "Coverage queue"}</p><h2 className="mt-1 font-display text-2xl font-extrabold">What needs attention</h2><div className="mt-6 space-y-3">{(role === "hospital" ? ["Review incoming MediSync records", "Check existing investigations before requesting repeats", "Confirm acceptance or request new evidence"] : ["Review patient evidence", "Check coverage and participating hospitals", "Record the authorization outcome"]).map((text, index) => <div key={text} className="flex gap-3 rounded-2xl bg-black/[.025] p-4"><span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--care-soft)] text-xs font-bold text-[var(--care)]">{index + 1}</span><p className="pt-1 text-sm font-semibold text-[var(--muted-strong)]">{text}</p></div>)}</div></div><div className="glass rounded-[26px] p-6 md:p-7"><p className="text-xs font-bold uppercase tracking-[.16em] text-[var(--muted)]">Human decision boundary</p><p className="mt-5 font-display text-xl font-extrabold">AI assists. Authorized people decide.</p><p className="mt-3 text-sm leading-6 text-[var(--muted)]">MediSync can classify, summarize and surface relevant evidence. Acceptance of an existing investigation, treatment decisions and insurance outcomes remain with authorized professionals.</p></div></section>
+        <InsuranceAICopilot />
       </>}
     </RoleShell>
   );
