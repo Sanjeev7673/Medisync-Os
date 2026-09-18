@@ -9,6 +9,7 @@ type HospitalMatch = {
   specialty: string;
   ownership: string;
   knownFor: string;
+  [key: string]: unknown;
 };
 
 type MatchResponse = {
@@ -26,58 +27,59 @@ function normalizeHospitalResponse(data: unknown): MatchResponse {
       ? (root._responseData as Record<string, unknown>)
       : {};
 
-  const candidates = [
-    responseData.hospitalResponse,
-    responseData.output,
-    responseData.response,
-    data,
+  // SNS Workbench may return either a formatted matches array or the
+  // Data Processing object containing hospitalMatching.candidates.
+  const objects: Record<string, unknown>[] = [
+    root,
+    responseData,
+    ...Object.values(root).filter(
+      (value): value is Record<string, unknown> =>
+        !!value && typeof value === "object" && !Array.isArray(value)
+    ),
+    ...Object.values(responseData).filter(
+      (value): value is Record<string, unknown> =>
+        !!value && typeof value === "object" && !Array.isArray(value)
+    ),
   ];
 
-  // Workbench can expose both an empty wrapper response and a populated
-  // structured output. Prefer the candidate containing the most matches.
-  let best: Record<string, unknown> | null = null;
-  let bestMatchCount = -1;
+  let bestMatches: HospitalMatch[] = [];
+  let bestMeta: Record<string, unknown> = {};
 
-  for (const candidate of candidates) {
-    if (!candidate || typeof candidate !== "object") continue;
-    const value = candidate as Record<string, unknown>;
-    if (!Array.isArray(value.matches)) continue;
+  for (const value of objects) {
+    if (Array.isArray(value.matches)) {
+      const matches = value.matches as HospitalMatch[];
+      if (matches.length > bestMatches.length) {
+        bestMatches = matches;
+        bestMeta = value;
+      }
+    }
 
-    const matches = value.matches as HospitalMatch[];
+    const hospitalMatching =
+      value.hospitalMatching && typeof value.hospitalMatching === "object"
+        ? (value.hospitalMatching as Record<string, unknown>)
+        : null;
 
-    if (matches.length > bestMatchCount) {
-      best = value;
-      bestMatchCount = matches.length;
+    if (hospitalMatching && Array.isArray(hospitalMatching.candidates)) {
+      const candidates = hospitalMatching.candidates as HospitalMatch[];
+      if (candidates.length > bestMatches.length) {
+        bestMatches = candidates;
+        bestMeta = hospitalMatching;
+      }
     }
   }
 
-  if (best) {
-    const matches = Array.isArray(best.matches)
-      ? (best.matches as HospitalMatch[])
-      : [];
-
-    return {
-      matches,
-      count: typeof best.count === "number" ? best.count : matches.length,
-      source:
-        typeof best.source === "string"
-          ? best.source
-          : "MediSync hospital dataset",
-      demo: best.demo !== false,
-      disclaimer:
-        typeof best.disclaimer === "string"
-          ? best.disclaimer
-          : "Hospital information and tier classification are dataset-based and not live clinical or quality verification.",
-    };
-  }
-
   return {
-    matches: [],
-    count: 0,
-    source: "MediSync hospital dataset",
-    demo: true,
+    matches: bestMatches,
+    count: typeof bestMeta.count === "number" ? bestMeta.count : bestMatches.length,
+    source:
+      typeof bestMeta.source === "string"
+        ? bestMeta.source
+        : "MediSync hospital dataset",
+    demo: bestMeta.demo !== false,
     disclaimer:
-      "Hospital information and tier classification are dataset-based and not live clinical or quality verification.",
+      typeof bestMeta.disclaimer === "string"
+        ? bestMeta.disclaimer
+        : "Hospital information and tier classification are dataset-based and not live clinical or quality verification.",
   };
 }
 
@@ -99,7 +101,7 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify({
         userId: body.userId ?? "hospital-portal-user",
         role: "HOSPITAL",
-        requestId: body.requestId ?? `hospital-${Date.now()}`,
+        requestId: body.requestId ?? "hospital-" + Date.now(),
         requestType: "HOSPITAL_MATCH",
         stage: "INITIAL",
         specialty: body.specialty ?? "",
