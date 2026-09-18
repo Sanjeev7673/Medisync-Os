@@ -40,14 +40,17 @@ export default function CompareHospitalsLauncher() {
             {loading ? "Reading the latest AI analysis…" : specialty ? `AI report specialty: ${specialty}` : "A supported specialty was not provided by the AI report."}
           </p>
         </div>
-        <button
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <button type="button" onClick={() => router.push("/documents")} className="rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm font-bold text-[#075e66] transition hover:bg-[#f2f8f9]">View documents</button>
+          <button
           type="button"
           onClick={compare}
           disabled={loading || !specialty}
           className="inline-flex shrink-0 items-center justify-center gap-2 rounded-2xl bg-[#075e66] px-5 py-3 text-sm font-bold text-white shadow-lg transition hover:bg-[#064f56] disabled:cursor-not-allowed disabled:opacity-45"
         >
           🏥 Compare Hospitals <span>→</span>
-        </button>
+          </button>
+        </div>
       </div>
     </section>
   );
