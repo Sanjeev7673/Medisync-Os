@@ -55,6 +55,37 @@ function getInitials(name: string) {
     .toUpperCase();
 }
 
+function getHospitalOfficialUrl(hospital: HospitalMatch) {
+  // Prefer the verified domain already carried by the dataset's favicon URL.
+  if (hospital.logoUrl) {
+    try {
+      const url = new URL(hospital.logoUrl);
+      const domain = url.searchParams.get("domain");
+      if (domain) return `https://${domain}`;
+    } catch {
+      // Fall through to the verified name map.
+    }
+  }
+
+  const name = hospital.hospitalName.toLowerCase();
+
+  const verifiedUrls: Array<[string, string]> = [
+    ["apollo", "https://www.apollohospitals.com/"],
+    ["frontier lifeline", "https://frontierlifeline.com/"],
+    ["mgm healthcare", "https://mgmhealthcare.in/"],
+    ["ganga hospital", "https://gangahospital.com/"],
+    ["kmch", "https://kmchhospitals.com/"],
+    ["psg hospitals", "https://www.psghospitals.com/"],
+    ["aravind eye hospital", "https://aravind.org/"],
+    ["aiims madurai", "https://www.aiimsmadurai.edu.in/"],
+    ["christian medical college", "https://www.cmcvellore.edu.in/"],
+    ["government vellore medical college", "https://vmcvlr.ac.in/"],
+    ["government rajaji hospital", "https://madurai.nic.in/public-utility/government-rajaji-hospital-madurai/"],
+  ];
+
+  return verifiedUrls.find(([key]) => name.includes(key))?.[1] ?? null;
+}
+
 export default function HospitalMatchingPage() {
   const [specialty, setSpecialty] = useState("");
   const [city, setCity] = useState("");
@@ -210,7 +241,25 @@ export default function HospitalMatchingPage() {
 
                       <div className="mt-5 flex gap-2">
                         <button type="button" className="min-h-10 flex-1 rounded-xl border border-[var(--ink)] px-3 py-2 text-xs font-bold text-[var(--ink)]">View Details</button>
-                        <button type="button" className="min-h-10 flex-1 rounded-xl bg-[var(--ink)] px-3 py-2 text-xs font-bold text-white">Contact Hospital ↗</button>
+                        {getHospitalOfficialUrl(hospital) ? (
+                          <a
+                            href={getHospitalOfficialUrl(hospital) as string}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="min-h-10 flex-1 rounded-xl bg-[var(--ink)] px-3 py-2 text-center text-xs font-bold text-white"
+                          >
+                            Official Website ↗
+                          </a>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled
+                            title="Official website not verified in the MediSync dataset"
+                            className="min-h-10 flex-1 cursor-not-allowed rounded-xl bg-black/10 px-3 py-2 text-xs font-bold text-[var(--muted)]"
+                          >
+                            Website not verified
+                          </button>
+                        )}
                       </div>
                     </article>
                   );
