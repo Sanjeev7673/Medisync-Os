@@ -112,26 +112,43 @@ function ComparePageContent() {
             {matches.length === 0 ? (
               <div className="mt-5 rounded-[24px] bg-white p-8 text-sm text-slate-600 shadow-sm">No hospitals were returned for this specialty.</div>
             ) : (
-              <div className="mt-5 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-                {matches.map((hospital, index) => (
-                  <article key={`${hospital.hospitalName}-${index}`} className="overflow-hidden rounded-[26px] border border-black/5 bg-white shadow-sm">
-                    <div className="flex items-center gap-4 border-b border-black/5 p-5">
-                      <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-[#f1f7f8] text-xl font-black text-[#075e66]">
-                        {hospital.logoUrl ? <img src={hospital.logoUrl} alt="" className="h-10 w-10 object-contain" onError={(event) => { event.currentTarget.style.display = "none"; }} /> : <span>{hospital.logoFallback || hospital.hospitalName.slice(0, 2).toUpperCase()}</span>}
+              <div className="mt-5 space-y-8">
+                {(["Tier 1", "Tier 2", "Tier 3"] as const).map((tier) => {
+                  const tierMatches = matches.filter((hospital) => hospital.tier.trim().toLowerCase() === tier.toLowerCase());
+                  if (!tierMatches.length) return null;
+                  return (
+                    <section key={tier}>
+                      <div className="mb-3 flex items-end justify-between gap-3">
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-[.18em] text-[#075e66]">Dataset tier</p>
+                          <h3 className="mt-1 text-xl font-extrabold text-[#102a32]">{tier}</h3>
+                        </div>
+                        <span className="rounded-full bg-[#eaf5f6] px-3 py-1.5 text-[10px] font-bold text-[#075e66]">{tierMatches.length} {tierMatches.length === 1 ? "hospital" : "hospitals"}</span>
                       </div>
-                      <div className="min-w-0">
-                        <h3 className="font-extrabold leading-5 text-[#102a32]">{hospital.emoji || "🏥"} {hospital.hospitalName}</h3>
-                        <p className="mt-1 text-xs text-slate-500">{hospital.city}{hospital.district && hospital.district !== hospital.city ? ` · ${hospital.district}` : ""}</p>
+                      <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+                        {tierMatches.map((hospital, index) => (
+                          <article key={`${hospital.hospitalName}-${hospital.city}-${index}`} className="overflow-hidden rounded-[26px] border border-black/5 bg-white shadow-sm">
+                            <div className="flex items-center gap-4 border-b border-black/5 p-5">
+                              <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-[#f1f7f8] text-xl font-black text-[#075e66]">
+                                {hospital.logoUrl ? <img src={hospital.logoUrl} alt="" className="h-10 w-10 object-contain" onError={(event) => { event.currentTarget.style.display = "none"; }} /> : <span>{hospital.logoFallback || hospital.hospitalName.slice(0, 2).toUpperCase()}</span>}
+                              </div>
+                              <div className="min-w-0">
+                                <h3 className="font-extrabold leading-5 text-[#102a32]">{hospital.emoji || "🏥"} {hospital.hospitalName}</h3>
+                                <p className="mt-1 text-xs text-slate-500">{hospital.city}{hospital.district && hospital.district !== hospital.city ? ` · ${hospital.district}` : ""}</p>
+                              </div>
+                            </div>
+                            <div className="space-y-4 p-5 text-xs">
+                              <div className="flex flex-wrap gap-2"><span className="rounded-full bg-[#eaf5f6] px-3 py-1 font-bold text-[#075e66]">{hospital.tier}</span><span className="rounded-full bg-slate-100 px-3 py-1 font-semibold text-slate-600">{hospital.ownership}</span></div>
+                              <div><p className="font-black uppercase tracking-[.12em] text-[9px] text-slate-400">Known for</p><p className="mt-1 leading-5 text-slate-700">{hospital.knownFor || "Not provided"}</p></div>
+                              <div><p className="font-black uppercase tracking-[.12em] text-[9px] text-slate-400">Cost information</p><p className="mt-1 font-bold text-[#123f44]">{hospital.cost || "Requires hospital confirmation"}</p>{hospital.costTreatment && <p className="mt-1 text-[10px] text-slate-500">Reference treatment: {hospital.costTreatment}</p>}{hospital.costType === "REFERENCE_ESTIMATE" && <p className="mt-1 text-[10px] text-amber-700">Reference estimate, not a guaranteed tariff.</p>}</div>
+                              {hospital.costSource && <p className="border-t border-black/5 pt-3 text-[9px] leading-4 text-slate-400">Source: {hospital.costSource}</p>}
+                            </div>
+                          </article>
+                        ))}
                       </div>
-                    </div>
-                    <div className="space-y-4 p-5 text-xs">
-                      <div className="flex flex-wrap gap-2"><span className="rounded-full bg-[#eaf5f6] px-3 py-1 font-bold text-[#075e66]">{hospital.tier}</span><span className="rounded-full bg-slate-100 px-3 py-1 font-semibold text-slate-600">{hospital.ownership}</span></div>
-                      <div><p className="font-black uppercase tracking-[.12em] text-[9px] text-slate-400">Known for</p><p className="mt-1 leading-5 text-slate-700">{hospital.knownFor || "Not provided"}</p></div>
-                      <div><p className="font-black uppercase tracking-[.12em] text-[9px] text-slate-400">Cost information</p><p className="mt-1 font-bold text-[#123f44]">{hospital.cost || "Requires hospital confirmation"}</p>{hospital.costTreatment && <p className="mt-1 text-[10px] text-slate-500">Reference treatment: {hospital.costTreatment}</p>}{hospital.costType === "REFERENCE_ESTIMATE" && <p className="mt-1 text-[10px] text-amber-700">Reference estimate, not a guaranteed tariff.</p>}</div>
-                      {hospital.costSource && <p className="border-t border-black/5 pt-3 text-[9px] leading-4 text-slate-400">Source: {hospital.costSource}</p>}
-                    </div>
-                  </article>
-                ))}
+                    </section>
+                  );
+                })}
               </div>
             )}
 
