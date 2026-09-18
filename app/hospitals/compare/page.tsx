@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import PatientShell from "@/components/PatientShell";
+import Link from "next/link";
 
 type Hospital = {
   hospitalName: string;
@@ -70,6 +71,17 @@ function ComparePageContent() {
   return (
     <PatientShell>
       <div className="mx-auto max-w-6xl">
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-500">
+            <Link href="/patient/dashboard" className="hover:text-[#075e66]">Overview</Link><span>›</span>
+            <Link href="/documents" className="hover:text-[#075e66]">Documents</Link><span>›</span>
+            <span className="text-[#075e66]">Hospital matching</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Link href="/documents" className="rounded-xl border border-black/10 bg-white px-3 py-2 text-xs font-bold text-[#075e66] hover:bg-[#f2f8f9]">← Documents</Link>
+            <Link href="/requests/new" className="rounded-xl bg-[#075e66] px-3 py-2 text-xs font-bold text-white hover:bg-[#064f56]">＋ New request</Link>
+          </div>
+        </div>
         <p className="text-xs font-bold uppercase tracking-[.18em] text-[var(--care)]">MediSync hospital matching</p>
         <h1 className="mt-2 font-display text-4xl font-extrabold tracking-[-.04em]">Compare Hospitals</h1>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-[var(--muted)]">
@@ -82,12 +94,16 @@ function ComparePageContent() {
         </div>
 
         {loading && <div className="mt-6 rounded-[24px] bg-white p-8 text-sm font-semibold text-slate-600 shadow-sm">Finding hospitals…</div>}
-        {error && <div className="mt-6 rounded-[24px] bg-white p-8 text-sm font-semibold text-red-600 shadow-sm">{error}</div>}
+        {error && <div className="mt-6 rounded-[24px] border border-red-100 bg-white p-8 shadow-sm"><p className="text-sm font-semibold text-red-600">{error}</p><div className="mt-4 flex flex-wrap gap-2"><Link href="/documents" className="rounded-xl border border-black/10 px-4 py-2 text-xs font-bold text-[#075e66]">Back to documents</Link><Link href="/requests/new" className="rounded-xl bg-[#075e66] px-4 py-2 text-xs font-bold text-white">Create new request</Link></div></div>}
 
         {!loading && !error && (
           <>
-            <div className="mt-6 flex items-center justify-between gap-4">
-              <div>
+            <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap gap-2">
+                <Link href="/documents" className="rounded-xl border border-black/10 bg-white px-3 py-2 text-xs font-bold text-[#075e66] hover:bg-[#f2f8f9]">← Documents</Link>
+                <Link href="/patient/dashboard" className="rounded-xl border border-black/10 bg-white px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50">Dashboard</Link>
+              </div>
+              <div className="text-right">
                 <h2 className="text-xl font-extrabold">Hospitals for {specialty}</h2>
                 <p className="mt-1 text-xs text-slate-500">{matches.length} matching dataset entries</p>
               </div>
