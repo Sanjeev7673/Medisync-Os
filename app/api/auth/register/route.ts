@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
     const { data: existingUser, error: existingError } = await db.from("users").select("id").eq("email", email).maybeSingle<{ id: string }>();
     if (existingError) throw existingError;
     if (existingUser) {
-      return NextResponse.json({ error: "An account with this email already exists. Please sign in instead.", code: "ACCOUNT_EXISTS", redirectTo: "/login" }, { status: 409 });
+      return NextResponse.json({ error: "An account with this email already exists. Please sign in instead.", code: "ACCOUNT_EXISTS", redirectTo: "/signin" }, { status: 409 });
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
