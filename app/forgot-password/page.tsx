@@ -42,10 +42,10 @@ export default function ForgotPasswordPage() {
     if (password !== confirmPassword) { setError("Passwords do not match."); return; }
     setLoading(true);
     try {
-      const response = await fetch("/api/auth/sns", {
+      const response = await fetch("/api/auth/verify-forgot-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "FORGOT_PASSWORD", role, otp, new_password: password }),
+        body: JSON.stringify({ email: email.trim().toLowerCase(), otp, password }),
       });
       const data = await response.json();
       const verified = data?.success === true || data?.status === "VERIFIED";
