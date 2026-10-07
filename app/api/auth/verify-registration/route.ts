@@ -36,12 +36,12 @@ export async function POST(req: NextRequest) {
     if (existingError) throw existingError;
     if (existingUser) {
       await db.from("pending_registrations").delete().eq("id", pending.id);
-      return NextResponse.json({ error: "An account with this email already exists. Please sign in instead.", code: "ACCOUNT_EXISTS", redirectTo: "/login" }, { status: 409 });
+      return NextResponse.json({ error: "An account with this email already exists. Please sign in instead.", code: "ACCOUNT_EXISTS", redirectTo: "/signin" }, { status: 409 });
     }
 
     const { data: user, error: userError } = await db.from("users").insert({ email: pending.email, password_hash: pending.password_hash, name: pending.name, role: "PATIENT", status: "ACTIVE" }).select("id,email,name,role,organization_id,status").single<{ id: string; email: string; name: string; role: "PATIENT"; organization_id: string | null; status: string }>();
     if (userError) {
-      if (userError.code === "23505") return NextResponse.json({ error: "An account with this email already exists. Please sign in instead.", code: "ACCOUNT_EXISTS", redirectTo: "/login" }, { status: 409 });
+      if (userError.code === "23505") return NextResponse.json({ error: "An account with this email already exists. Please sign in instead.", code: "ACCOUNT_EXISTS", redirectTo: "/signin" }, { status: 409 });
       throw userError;
     }
     if (!user) throw new Error("Registration did not return the created user");
