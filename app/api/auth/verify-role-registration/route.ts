@@ -43,11 +43,11 @@ export async function POST(req: NextRequest) {
 
     const { data: existingUser, error: existingError } = await db.from("users").select("id").eq("email", email).maybeSingle<{ id: string }>();
     if (existingError) throw existingError;
-    if (existingUser) return NextResponse.json({ error: "An account with this email already exists. Please sign in instead.", redirectTo: "/login" }, { status: 409 });
+    if (existingUser) return NextResponse.json({ error: "An account with this email already exists. Please sign in instead.", redirectTo: "/signin" }, { status: 409 });
 
     const { data: user, error: userError } = await db.from("users").insert({ email: pending.email, password_hash: pending.password_hash, name: pending.name, role, status: "ACTIVE", profile_details: details }).select("id,email,name,role,organization_id,status").single<any>();
     if (userError) {
-      if (userError.code === "23505") return NextResponse.json({ error: "An account with this email already exists. Please sign in instead.", redirectTo: "/login" }, { status: 409 });
+      if (userError.code === "23505") return NextResponse.json({ error: "An account with this email already exists. Please sign in instead.", redirectTo: "/signin" }, { status: 409 });
       throw userError;
     }
     await db.from("pending_registrations").delete().eq("id", pending.id);
