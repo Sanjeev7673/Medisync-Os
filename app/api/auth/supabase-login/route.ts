@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import bcrypt from "bcryptjs";
 import {
   createSession,
   dashboardForRole,
@@ -31,13 +31,7 @@ const loginRoleLabels: Record<Exclude<UserRole, "specialist">, string> = {
   admin: "administrator",
 };
 
-function required(name: "SUPABASE_URL" | "SUPABASE_SECRET_KEY") {
-  const value = process.env[name];
-  if (!value) throw new Error(`Missing environment variable: ${name}`);
-  return value;
-}
-
-const userSelect = "id,medisync_id,email,name,role,organization_id,status,session_version,created_at,updated_at";
+const userSelect = "id,medisync_id,email,name,password_hash,role,organization_id,status,session_version,created_at,updated_at";
 
 export async function POST(req: NextRequest) {
   try {
@@ -56,68 +50,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid portal" }, { status: 400 });
     }
 
-    const supabase = createClient(required("SUPABASE_URL"), required("SUPABASE_SECRET_KEY"), {
-      auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false },
-    });
-
-    // Supabase Auth is the only source of truth for email/password credentials.
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email, password });
-
-    if (authError || !authData.user) {
-      return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
-    }
-
     const db = getDb();
     let { data: user, error: userError } = await db
       .from("users")
       .select(userSelect)
       .eq("email", email)
       .eq("role", expectedRole ? dbRoleMap[expectedRole as Exclude<UserRole, "specialist">] : "PATIENT")
-      .maybeSingle<DbUser>();
+      .maybeSingle<DbUser & { password_hash?: string | null }>();
 
     if (userError) throw userError;
 
-    // A user created directly in Supabase Auth gets a lightweight MediSync
-    // profile on first login. No password is copied into public.users.
-    if (!user) {
-      if (!expectedRole || expectedRole === "specialist") {
-        return NextResponse.json({ error: "Please select a valid MediSync portal before signing in." }, { status: 400 });
-      }
-
-      const metadataName = [
-        authData.user.user_metadata?.full_name,
-        authData.user.user_metadata?.name,
-      ].find((value) => typeof value === "string" && value.trim());
-      const name = metadataName?.trim() || email.split("@")[0] || "MediSync User";
-
-      const { data: createdUser, error: createError } = await db
-        .from("users")
-        .insert({
-          email,
-          name,
-          role: dbRoleMap[expectedRole],
-          status: "ACTIVE",
-        })
-        .select(userSelect)
-        .single<DbUser>();
-
-      if (createError) {
-        if (createError.code !== "23505") throw createError;
-        const { data: existingUser, error: retryError } = await db
-          .from("users")
-          .select(userSelect)
-          .eq("email", email)
-          .eq("role", dbRoleMap[expectedRole])
-          .maybeSingle<DbUser>();
-        if (retryError) throw retryError;
-        user = existingUser;
-      } else {
-        user = createdUser;
-      }
+    // Registration stores the bcrypt hash in public.users. Authenticate against
+    // the same source of truth instead of requiring a second Supabase Auth account.
+    if (!user?.password_hash || !(await bcrypt.compare(password, user.password_hash))) {
+      return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
     }
 
     if (!user) {
-      return NextResponse.json({ error: "MediSync profile could not be created." }, { status: 500 });
+      return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
     }
 
     if (user.status !== "ACTIVE") {
